@@ -1,0 +1,80 @@
+{
+  "resourceType": "Encounter",
+  "id": "3b6c7d8e-4f5a-4b2c-9d3e-4f5a6b7c8d9e",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2026-10-19T22:00:00Z",
+    "profile": [
+      "https://telemedicine.example.org/fhir/StructureDefinition/telemedicine-encounter"
+    ]
+  },
+  "identifier": [
+    {
+      "use": "official",
+      "system": "https://telemedicine.example.org/identifier/encounter",
+      "value": "3b6c7d8e-4f5a-4b2c-9d3e-4f5a6b7c8d9e"
+    }
+  ],
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActEncounterCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "VR",
+          "display": "virtual"
+        }
+      ],
+      "text": "Virtual consultation"
+    }
+  ],
+  "subject": {
+    "reference": "Patient/1f3c9a20-6b1e-4c2f-9a44-0d5b6c7e8f91",
+    "display": "Ada Nwosu Okonkwo"
+  },
+  "participant": [
+    {
+      "type": [
+        {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+              "code": "PPR",
+              "display": "primary performer"
+            }
+          ]
+        }
+      ],
+      "individual": {
+        "reference": "Practitioner/7d2e4b31-8c3a-4d5e-8b6f-1e2d3c4b5a60",
+        "display": "Dr. Elena Ramirez"
+      }
+    }
+  ],
+  "appointment": [
+    {
+      "reference": "Appointment/2a5b6c7d-9e4f-4a1b-8c2d-3e4f5a6b7c8d",
+      "display": "Telemedicine consultation 2026-10-21"
+    }
+  ],
+  "period": {
+    "start": "2026-10-21T14:02:00Z",
+    "end": "2026-10-21T14:28:00Z"
+  },
+  "reasonCode": [
+    {
+      "text": "Persistent cough, six days"
+    }
+  ],
+  "extension": [
+    {
+      "url": "https://telemedicine.example.org/fhir/StructureDefinition/encounter-clinical-note",
+      "valueString": "Patient reports a dry cough persisting for six days. No fever or shortness of breath. Discussed home management, safety-netting advice and issued a prescription."
+    }
+  ]
+}
