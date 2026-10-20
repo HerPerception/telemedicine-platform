@@ -16,6 +16,12 @@ environment of a machine they run on.
                               accident is a server that answers on a
                               network it was never meant to.
 ``TELEMEDICINE_PORT``          the port to listen on. Default ``8080``.
+``TELEMEDICINE_TRUST_FORWARDED_FOR``  whether to believe the address a
+                              proxy says the request came from. Off by
+                              default: the header is set by whoever sends
+                              the request, so it is only safe behind a
+                              proxy that replaces it. It is what the
+                              login lockout counts per address.
 ``TELEMEDICINE_AUDIT_ANCHOR``  the file the audit chain is anchored to.
                               Without it the chain is not anchored, and
                               a chain rewritten from the beginning cannot
@@ -33,6 +39,7 @@ ENV_DATABASE_URL = "TELEMEDICINE_DATABASE_URL"
 ENV_HOST = "TELEMEDICINE_HOST"
 ENV_PORT = "TELEMEDICINE_PORT"
 ENV_AUDIT_ANCHOR = "TELEMEDICINE_AUDIT_ANCHOR"
+ENV_TRUST_FORWARDED_FOR = "TELEMEDICINE_TRUST_FORWARDED_FOR"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
@@ -46,6 +53,7 @@ class Settings:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     audit_anchor: Optional[str] = None
+    trust_forwarded_for: bool = False
 
     @property
     def has_database(self) -> bool:
@@ -64,7 +72,9 @@ class Settings:
         except ValueError as error:
             raise ValueError(f"{ENV_PORT} must be a number, not '{port_text}'") from error
         anchor = (environment.get(ENV_AUDIT_ANCHOR) or "").strip() or None
-        return cls(database_url=database_url, host=host, port=port, audit_anchor=anchor)
+        forwarded = (environment.get(ENV_TRUST_FORWARDED_FOR) or "").strip().lower()
+        return cls(database_url=database_url, host=host, port=port, audit_anchor=anchor,
+                   trust_forwarded_for=forwarded in ("1", "true", "yes", "on"))
 
     def describe(self) -> str:
         """A description of the settings, without the secret."""

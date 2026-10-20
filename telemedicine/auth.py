@@ -34,14 +34,44 @@ from telemedicine.security import (
 MIN_PASSWORD_LENGTH = 12
 DEFAULT_SESSION_TTL = timedelta(hours=8)
 
-# The lockout policy (SEC-04 of the compliance review). After this many
-# consecutive failures the account is locked, and every further failure
-# doubles the lock, up to the maximum. The counter has to be shared between
-# the instances of the application, which is why it is a store and not a
-# field of the service.
-LOCKOUT_THRESHOLD = 5
+# The lockout policy (SEC-04 of the compliance review).
+#
+# There are two counters, and the difference between them matters:
+#
+# * **the source** is the address the request came from. Five failures from
+#   one address block that address. This is the defence against a
+#   password-guessing attack, and it is what a single attacker meets.
+# * **the account** is locked when the failures are *spread* over many
+#   addresses — twenty of them, each of them new. That is the shape of a
+#   distributed attack, and it is the shape an attacker with one address
+#   cannot produce.
+#
+# The second point is why the account is not simply locked after five
+# failures: an attacker who knows a victim's address could lock that
+# account out and stop the patient seeing their own results. The account
+# counter only grows once per address, so one address cannot do it, and a
+# spray across twenty addresses is loud in the audit log.
+#
+# The counters have to be shared between the instances of the application,
+# which is why they are a store and not a field of the service.
+SOURCE_THRESHOLD = 5
+SOURCE_DELAY = timedelta(minutes=15)
+ACCOUNT_THRESHOLD = 20
+ACCOUNT_DELAY = timedelta(minutes=30)
 LOCKOUT_BASE_DELAY = timedelta(minutes=1)
 LOCKOUT_MAX_DELAY = timedelta(minutes=15)
+
+
+def _account_key(email: str) -> str:
+    return f"account:{email}"
+
+
+def _source_key(address: str) -> str:
+    return f"source:{address}"
+
+
+def _pair_key(email: str, address: str) -> str:
+    return f"pair:{email}|{address}"
 
 # Audit actions used by this module.
 ACTION_ACCOUNT_CREATE = "account.create"
@@ -172,9 +202,6 @@ class AuthService:
                  lockout: Optional[LockoutStore] = None,
                  *, password_iterations: int = DEFAULT_ITERATIONS,
                  session_ttl: timedelta = DEFAULT_SESSION_TTL,
-                 lockout_threshold: int = LOCKOUT_THRESHOLD,
-                 lockout_base_delay: timedelta = LOCKOUT_BASE_DELAY,
-                 lockout_max_delay: timedelta = LOCKOUT_MAX_DELAY,
                  clock: Callable[[], datetime] = _utc_now):
         self.users = users if users is not None else UserRepository()
         self.audit = audit if audit is not None else AuditLog(clock=clock)
@@ -185,9 +212,6 @@ class AuthService:
         self.lockout = lockout if lockout is not None else InMemoryLockoutStore()
         self.password_iterations = password_iterations
         self.session_ttl = session_ttl
-        self.lockout_threshold = lockout_threshold
-        self.lockout_base_delay = lockout_base_delay
-        self.lockout_max_delay = lockout_max_delay
         self._clock = clock
         # A hash of a value nobody knows, used to spend the same time on a
         # login for an account that does not exist as on a login with a
@@ -280,13 +304,18 @@ class AuthService:
 
     # -- authentication ---------------------------------------------------
 
-    def authenticate(self, email: str, password: str) -> UserAccount:
+    def authenticate(self, email: str, password: str,
+                     source: Optional[str] = None) -> UserAccount:
         """Verify an email and password.
 
         Raises :class:`~telemedicine.errors.AuthenticationError` for every
-        failure — unknown account, wrong password, disabled account — so that
-        the caller cannot tell the difference and probe for valid accounts.
-        Every attempt is audited.
+        failure — unknown account, wrong password, disabled account, a locked
+        account, a blocked address — so that the caller cannot tell the
+        difference and probe for valid accounts. Every attempt is audited.
+
+        ``source`` is the address the request came from. It is what makes
+        the difference between one attacker guessing and many, so the HTTP
+        layer has to pass it.
         """
         normalized = ""
         try:
@@ -297,7 +326,12 @@ class AuthService:
             raise AuthenticationError("invalid credentials") from None
 
         now = self._clock()
-        if self._is_locked(normalized, now):
+        account_key = _account_key(normalized)
+        source_key = _source_key(source) if source else None
+        pair_key = _pair_key(normalized, source) if source else None
+
+        if self._is_locked(account_key, now) or (
+                source_key is not None and self._is_locked(source_key, now)):
             self._audit_locked(normalized)
             raise AuthenticationError("invalid credentials")
 
@@ -306,13 +340,13 @@ class AuthService:
             # Spend the same time as a real verification, so that the
             # response does not reveal whether the account exists.
             verify_password(password, self._decoy_hash)
-            self._record_failure(normalized, now)
+            self._record_failure(account_key, source_key, pair_key, now)
             self._audit_login_failure(UNKNOWN_ACTOR, "unknown", normalized,
                                       "no such account")
             raise AuthenticationError("invalid credentials")
 
         if not verify_password(password, account.password_hash):
-            self._record_failure(normalized, now)
+            self._record_failure(account_key, source_key, pair_key, now)
             self._audit_login_failure(account.user_id, account.role.value, normalized,
                                       "password did not match")
             raise AuthenticationError("invalid credentials")
@@ -322,7 +356,9 @@ class AuthService:
                                       "account is disabled")
             raise AuthenticationError("invalid credentials")
 
-        self.lockout.record_success(normalized)
+        self.lockout.record_success(account_key)
+        if source_key is not None:
+            self.lockout.record_success(source_key)
 
         self.audit.append(
             actor_user_id=account.user_id,
@@ -340,14 +376,32 @@ class AuthService:
         until = self.lockout.locked_until(key)
         return until is not None and now < until
 
-    def _record_failure(self, key: str, now: datetime) -> None:
-        """Count a failure, and lock the key when there are too many."""
-        attempts = self.lockout.record_failure(key, now)
-        if attempts < self.lockout_threshold:
-            return
-        delay = self.lockout_base_delay * (2 ** (attempts - self.lockout_threshold))
-        delay = min(delay, self.lockout_max_delay)
-        self.lockout.set_locked_until(key, now + delay)
+    def _record_failure(self, account_key: str, source_key: Optional[str],
+                        pair_key: Optional[str], now: datetime) -> None:
+        """Count a failure, and lock what has failed too often.
+
+        The source is counted first: an address that has failed this account
+        before is not a new one, and a new address is what suggests a
+        distributed attack rather than a patient who forgot their password.
+        """
+        if source_key is not None:
+            source_attempts = self.lockout.record_failure(source_key, now)
+            if source_attempts >= SOURCE_THRESHOLD:
+                self.lockout.set_locked_until(source_key, now + SOURCE_DELAY)
+            if pair_key is not None and self.lockout.attempts(pair_key) == 0:
+                # The first failure from this address against this account.
+                self.lockout.record_failure(pair_key, now)
+
+        if pair_key is None:
+            # No address to count: the account counter is the only one.
+            account_attempts = self.lockout.record_failure(account_key, now)
+        else:
+            account_attempts = self.lockout.attempts(account_key)
+            if self.lockout.attempts(pair_key) == 1:
+                account_attempts = self.lockout.record_failure(account_key, now)
+
+        if account_attempts >= ACCOUNT_THRESHOLD:
+            self.lockout.set_locked_until(account_key, now + ACCOUNT_DELAY)
 
     def _audit_locked(self, email: str) -> None:
         self.audit.append(

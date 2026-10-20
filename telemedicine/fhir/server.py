@@ -43,6 +43,7 @@ from telemedicine.errors import (
 from telemedicine.fhir import serialization
 from telemedicine.fhir.repository import FhirRepository
 from telemedicine.fhir.validation import validate_resource
+from telemedicine.session_api import SessionEndpoints
 
 RESOURCE_TYPES = {
     "Patient": "patient",
@@ -66,10 +67,12 @@ class FhirApplication:
     """Routes a request to the repository and builds the response."""
 
     def __init__(self, repository: FhirRepository, auth: AuthService,
-                 base_path: str = "/fhir"):
+                 base_path: str = "/fhir", trust_forwarded_for: bool = False):
         self.repository = repository
         self.auth = auth
         self.base_path = base_path.rstrip("/")
+        # Signing in and out, and the address the request came from.
+        self.sessions = SessionEndpoints(auth, trust_forwarded_for=trust_forwarded_for)
 
     # -- the entry point ---------------------------------------------------
 
@@ -109,6 +112,14 @@ class FhirApplication:
             if method != "GET":
                 return self._method_not_allowed(method)
             return self._json(200, serialization.capability_statement())
+
+        if remainder == "session":
+            if method == "POST":
+                return self._json(201, self.sessions.sign_in(headers, body))
+            if method == "DELETE":
+                self.sessions.sign_out(headers)
+                return Response(status=204, body=b"", headers={})
+            return self._method_not_allowed(method)
 
         segments = [segment for segment in remainder.split("/") if segment]
         resource_type = segments[0]
@@ -328,8 +339,15 @@ class _Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
+        headers = dict(self.headers)
+        # The address the request came from, which the lockout needs. It is
+        # the socket address, unless a proxy is trusted to say otherwise.
+        try:
+            headers["x-client-address"] = self.client_address[0]
+        except (AttributeError, IndexError):  # pragma: no cover - defensive
+            pass
         response = self.application.handle(
-            method, parsed.path, parse_qs(parsed.query), dict(self.headers), body)
+            method, parsed.path, parse_qs(parsed.query), headers, body)
         self.send_response(response.status)
         for key, value in response.headers.items():
             self.send_header(key, value)

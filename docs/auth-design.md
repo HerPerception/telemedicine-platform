@@ -154,7 +154,7 @@ documents the lock to use.
 
 | Gate (README) | Status after ENG-002 |
 | --- | --- |
-| Security: strong authentication | Partly met — password hashing, session lifecycle, role-scoped authorization. Not met: MFA, lockout, TLS enforcement |
+| Security: strong authentication | Partly met — password hashing, session lifecycle, role-scoped authorization, and a lockout that counts the address as well as the account (ENG-013). Not met: MFA, TLS enforcement |
 | Security: role-based authorization | Met for the records in scope; the API must enforce it for every endpoint |
 | Auditability: tamper-evident logs | Met for record and prescription access, and for authentication events |
 | Privacy: minimum-necessary data access | Met for the read paths — the treatment relationship is the only thing that grants access |
@@ -171,9 +171,15 @@ documents the lock to use.
 
 1. **No persistence.** The repositories are in memory; a restart loses accounts and sessions.
 2. **No database execution.** `db/auth_schema.sql` has not been run against PostgreSQL.
-3. **No lockout or rate limiting.** `failed_attempts` and `locked_until` exist in the schema but
-   nothing writes them, and a single-process in-memory counter would be wrong behind more than one
-   instance. This is a real gap for a credential-stuffing defence.
+3. **The lockout counts the address and the account, and no more.** ENG-013 gave the
+   authentication service the address a request came from, and the policy follows from it: an
+   address is blocked after five failures, and an account is locked only when the failures are
+   spread over twenty *different* addresses. The second half is the point — an account locked after
+   five failures could be locked out by one attacker who knows the address, and a patient who then
+   cannot see their own results. A distributed attack has breadth and a single address does not, so
+   the account lockout needs breadth. The residual risk is that an attacker willing to spray across
+   twenty addresses can still lock an account; the lockout is short, and every one of them is in the
+   audit log.
 4. **No password reset or email.** There is no mail transport in the MVP, so there is no reset flow.
    A deployment needs one before it can serve real patients.
 5. **No multi-factor authentication.** OPS-001 must decide whether the jurisdiction requires it.
@@ -182,6 +188,9 @@ documents the lock to use.
 7. **The `https://telemedicine.example.org` placeholder** in the medication code system and the
    identifier URIs still needs replacing with the deployment's canonical base URL.
 8. **The session TTL is a constant**, not a per-role or per-risk value.
+9. **There was no way to sign in over HTTP** until ENG-013 added the session endpoints. A client
+   had no way of getting a token, and the API was unusable by anything but the tests. There are now
+   `POST /fhir/session` and `POST /video/session`, and `DELETE` on the same paths signs out.
 
 ## 10. What ENG-006 must do
 

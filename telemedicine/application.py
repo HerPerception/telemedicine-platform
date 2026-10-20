@@ -150,8 +150,10 @@ def build_application(settings: Optional[Settings] = None,
                                         notifications=notifications)
     video = VideoService(records, audit=audit)
 
-    fhir = FhirApplication(FhirRepository(records, booking, prescriptions), auth)
-    video_api = VideoApplication(video, auth)
+    fhir = FhirApplication(FhirRepository(records, booking, prescriptions), auth,
+                            trust_forwarded_for=settings.trust_forwarded_for)
+    video_api = VideoApplication(video, auth,
+                                 trust_forwarded_for=settings.trust_forwarded_for)
 
     application = Application(
         settings=settings,
