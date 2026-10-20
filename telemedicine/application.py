@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from telemedicine.audit import AuditLog
+from telemedicine.audit_anchor import AnchoredAuditLog, FileAuditAnchor
 from telemedicine.auth import AuthService
 from telemedicine.booking import BookingService, SlotService
 from telemedicine.config import Settings
@@ -105,6 +106,10 @@ def build_application(settings: Optional[Settings] = None,
     settings = settings if settings is not None else Settings.from_environment()
     database = Database(settings.database_url) if settings.has_database else None
 
+    anchor_store = None
+    if settings.audit_anchor:
+        anchor_store = FileAuditAnchor(settings.audit_anchor)
+
     if database is not None:
         from telemedicine.persistence.account_store import (
             PostgresSessionStore,
@@ -127,6 +132,12 @@ def build_application(settings: Optional[Settings] = None,
         clinical = None
         slot_store = None
         notification_store = None
+
+    if anchor_store is not None:
+        # The chain is published outside the database, so that a chain
+        # rewritten from the beginning can be told apart from an untouched
+        # one. The internal check cannot see that difference.
+        audit = AnchoredAuditLog(audit, anchor_store)
 
     notifications = NotificationService(store=notification_store, audit=audit)
 

@@ -16,6 +16,10 @@ environment of a machine they run on.
                               accident is a server that answers on a
                               network it was never meant to.
 ``TELEMEDICINE_PORT``          the port to listen on. Default ``8080``.
+``TELEMEDICINE_AUDIT_ANCHOR``  the file the audit chain is anchored to.
+                              Without it the chain is not anchored, and
+                              a chain rewritten from the beginning cannot
+                              be told apart from an untouched one.
 ============================  ==========================================
 """
 
@@ -28,6 +32,7 @@ from typing import Optional
 ENV_DATABASE_URL = "TELEMEDICINE_DATABASE_URL"
 ENV_HOST = "TELEMEDICINE_HOST"
 ENV_PORT = "TELEMEDICINE_PORT"
+ENV_AUDIT_ANCHOR = "TELEMEDICINE_AUDIT_ANCHOR"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
@@ -40,6 +45,7 @@ class Settings:
     database_url: Optional[str] = None
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
+    audit_anchor: Optional[str] = None
 
     @property
     def has_database(self) -> bool:
@@ -57,7 +63,8 @@ class Settings:
             port = int(port_text) if port_text else DEFAULT_PORT
         except ValueError as error:
             raise ValueError(f"{ENV_PORT} must be a number, not '{port_text}'") from error
-        return cls(database_url=database_url, host=host, port=port)
+        anchor = (environment.get(ENV_AUDIT_ANCHOR) or "").strip() or None
+        return cls(database_url=database_url, host=host, port=port, audit_anchor=anchor)
 
     def describe(self) -> str:
         """A description of the settings, without the secret."""
