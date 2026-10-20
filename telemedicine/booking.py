@@ -48,7 +48,7 @@ from telemedicine.authorization import (
     Authorizer,
     ResourceType,
 )
-from telemedicine.errors import AuthorizationError, ValidationError
+from telemedicine.errors import AuthorizationError, ConflictError, ValidationError
 from telemedicine.models import Role, UserAccount
 from telemedicine.records import Appointment
 
@@ -363,7 +363,7 @@ class BookingService:
                 if existing is not None and existing.status != APPOINTMENT_CANCELLED:
                     self._refuse(actor, ACTION_BOOK, ResourceType.APPOINTMENT.value, slot_id,
                                  "the slot is already booked")
-                    raise ValidationError("the slot is no longer available")
+                    raise ConflictError("the slot is no longer available")
             appointment = Appointment(
                 appointment_id=str(uuid.uuid4()),
                 patient_id=patient_id,
@@ -430,7 +430,7 @@ class BookingService:
                 if held is not None and held.status != APPOINTMENT_CANCELLED:
                     self._refuse(actor, ACTION_RESCHEDULE, ResourceType.APPOINTMENT.value,
                                  appointment_id, "the new slot is already booked")
-                    raise ValidationError("the new slot is no longer available")
+                    raise ConflictError("the new slot is no longer available")
 
             old_slot_id = appointment.slot_id
             moved = replace(
