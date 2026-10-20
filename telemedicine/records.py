@@ -17,7 +17,7 @@ account and the patient or practitioner row it belongs to.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Dict, FrozenSet, List, Optional, Tuple
 
@@ -32,6 +32,8 @@ MEDICATION_CATALOG_SYSTEM = "https://telemedicine.example.org/CodeSystem/medicat
 ACTION_RECORD_READ = "record.read"
 ACTION_PRESCRIPTION_CREATE = "prescription.create"
 ACTION_PRESCRIPTION_READ = "prescription.read"
+# Added by ENG-005 (e-prescriptions).
+ACTION_STATUS_CHANGE = "prescription.status_change"
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,22 @@ class PatientRecord:
     user_id: str
     display_name: str
     date_of_birth: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PractitionerRecord:
+    """A clinician's record.
+
+    Added by ENG-005 (e-prescriptions): the prescription document states who
+    prescribed the medication, and the prescription is tied to the
+    practitioner row of the clinical model.
+    """
+
+    practitioner_id: str
+    user_id: str
+    display_name: str
+    identifier: Optional[str] = None
+    specialty: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +113,7 @@ class RecordsService:
         self.authorizer = authorizer if authorizer is not None else Authorizer()
         self.audit = audit if audit is not None else AuditLog()
         self._patients: Dict[str, PatientRecord] = {}
+        self._practitioners: Dict[str, PractitionerRecord] = {}
         self._appointments: Dict[str, Appointment] = {}
         self._encounters: Dict[str, Encounter] = {}
         self._prescriptions: Dict[str, Prescription] = {}
@@ -107,6 +126,16 @@ class RecordsService:
     def add_patient(self, patient: PatientRecord) -> PatientRecord:
         self._patients[patient.patient_id] = patient
         return patient
+
+    def add_practitioner(self, practitioner: PractitionerRecord) -> PractitionerRecord:
+        self._practitioners[practitioner.practitioner_id] = practitioner
+        return practitioner
+
+    def patient_record(self, patient_id: str) -> Optional[PatientRecord]:
+        return self._patients.get(patient_id)
+
+    def practitioner_record(self, practitioner_id: str) -> Optional[PractitionerRecord]:
+        return self._practitioners.get(practitioner_id)
 
     def add_appointment(self, appointment: Appointment) -> Appointment:
         self._appointments[appointment.appointment_id] = appointment
@@ -202,6 +231,11 @@ class RecordsService:
         Only the clinician who treated the encounter may issue it, and the
         prescription inherits the encounter's patient and prescriber — the
         same pairing the database enforces with a composite foreign key.
+
+        The audit entry of a successful issue identifies the prescription
+        that was created. A refused attempt identifies the encounter it was
+        refused for, because no prescription exists to point at; both
+        entries name the encounter in their detail.
         """
         encounter = self._encounters.get(encounter_id)
         if encounter is None:
@@ -210,11 +244,26 @@ class RecordsService:
             raise ValidationError(
                 "a prescription needs a medication code, a display name and dosage text")
         scope = self._encounter_scope(encounter)
-        self._authorize_and_audit(
-            actor, Action.CREATE, ResourceType.MEDICATION_REQUEST, scope, encounter_id,
-            audit_action=ACTION_PRESCRIPTION_CREATE,
-            detail=f"issue prescription for encounter {encounter_id}",
-        )
+        decision = self.authorizer.decide(actor, Action.CREATE,
+                                           ResourceType.MEDICATION_REQUEST, scope)
+        if not decision.allowed:
+            self.audit.append(
+                actor_user_id=actor.user_id,
+                actor_role=actor.role.value,
+                action=ACTION_PRESCRIPTION_CREATE,
+                resource_type=ResourceType.MEDICATION_REQUEST.value,
+                resource_id=encounter_id,
+                outcome=OUTCOME_DENIED,
+                detail=f"issue a prescription for encounter {encounter_id} — denied: "
+                       f"{decision.reason}",
+            )
+            raise AuthorizationError(
+                decision.reason,
+                resource_type=ResourceType.MEDICATION_REQUEST.value,
+                resource_id=encounter_id,
+                action=Action.CREATE.value,
+            )
+
         prescription = Prescription(
             prescription_id=str(uuid.uuid4()),
             encounter_id=encounter.encounter_id,
@@ -229,6 +278,15 @@ class RecordsService:
             authored_on=authored_on or datetime.now(timezone.utc),
         )
         self._prescriptions[prescription.prescription_id] = prescription
+        self.audit.append(
+            actor_user_id=actor.user_id,
+            actor_role=actor.role.value,
+            action=ACTION_PRESCRIPTION_CREATE,
+            resource_type=ResourceType.MEDICATION_REQUEST.value,
+            resource_id=prescription.prescription_id,
+            outcome=OUTCOME_SUCCESS,
+            detail=f"issued a prescription for encounter {encounter_id}",
+        )
         return prescription
 
     def read_prescription(self, actor: UserAccount, prescription_id: str) -> Prescription:
@@ -257,6 +315,37 @@ class RecordsService:
         )
         return [prescription for prescription in self._prescriptions.values()
                 if prescription.encounter_id == encounter_id]
+
+    def get_prescription(self, prescription_id: str) -> Prescription:
+        """Return a prescription without auditing the access.
+
+        For internal use, for example to check the current status before a
+        transition. Reading a prescription *for a user* goes through
+        :meth:`read_prescription`, which authorizes and audits.
+        """
+        prescription = self._prescriptions.get(prescription_id)
+        if prescription is None:
+            raise ValidationError(f"no prescription with id '{prescription_id}'")
+        return prescription
+
+    def update_prescription_status(self, actor: UserAccount, prescription_id: str,
+                                   status: str, *, reason: str = "") -> Prescription:
+        """Change the status of a prescription. Authorized and audited.
+
+        Added by ENG-005 (e-prescriptions): the prescription lifecycle needs
+        a write path that only the treating clinician may use.
+        """
+        prescription = self.get_prescription(prescription_id)
+        scope = self._prescription_scope(prescription)
+        self._authorize_and_audit(
+            actor, Action.UPDATE, ResourceType.MEDICATION_REQUEST, scope, prescription_id,
+            audit_action=ACTION_STATUS_CHANGE,
+            detail=f"change status to {status}"
+                   + (f": {reason}" if reason else ""),
+        )
+        updated = replace(prescription, status=status)
+        self._prescriptions[prescription_id] = updated
+        return updated
 
     # -- internals --------------------------------------------------------
 

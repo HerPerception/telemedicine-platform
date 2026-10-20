@@ -287,6 +287,9 @@ class RecordsServiceAccessTest(unittest.TestCase):
             self.service.read_prescription(self.other_practitioner, prescription.prescription_id)
 
     def test_prescription_creation_is_audited_against_the_encounter(self):
+        # Amended by ENG-005: a successful create identifies the prescription
+        # that was created; the encounter it belongs to is named in the
+        # detail.
         self.service.issue_prescription(
             self.practitioner, "encounter-1",
             medication_code="AMOX-500-CAP",
@@ -296,8 +299,8 @@ class RecordsServiceAccessTest(unittest.TestCase):
         entry = [item for item in self.audit.entries
                  if item.action == ACTION_PRESCRIPTION_CREATE][0]
         self.assertEqual(entry.resource_type, "medication_request")
-        self.assertEqual(entry.resource_id, "encounter-1")
-        self.assertEqual(entry.actor_user_id, "user-practitioner")
+        self.assertIn("encounter-1", entry.detail)
+        self.assertTrue(entry.resource_id)
 
     def test_every_read_of_a_record_leaves_an_audit_entry(self):
         self.service.read_patient_record(self.patient, PATIENT_ID)

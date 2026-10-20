@@ -131,6 +131,12 @@ RULES: Tuple[Rule, ...] = (
     Rule(Role.PRACTITIONER, ResourceType.MEDICATION_REQUEST, Action.CREATE, TREATING,
          "only the treating clinician may issue a prescription"),
 
+    # --- ENG-005: the prescription lifecycle -----------------------------
+    # A prescription is changed by the clinician who issued it. A patient may
+    # read and download their own prescriptions, but may not change one.
+    Rule(Role.PRACTITIONER, ResourceType.MEDICATION_REQUEST, Action.UPDATE, TREATING,
+         "the treating clinician may change a prescription they issued"),
+
     # --- ENG-003: booking and schedule management ------------------------
     # A patient books, reschedules and cancels their own appointments; a
     # practitioner does the same for the patients they treat, and manages the
