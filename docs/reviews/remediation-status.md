@@ -4,6 +4,8 @@
 - **Purpose:** to say, for each finding, whether it is closed, partly closed, or still open — so that
   the sign-off conditions in §8 of the review can be checked against something.
 - **Updated:** 2026-10-20
+- **Jurisdiction:** Nigeria, answered by the practice on 2026-10-20. The answers, and the law they
+  rest on, are in [`docs/compliance/nigeria.md`](../compliance/nigeria.md).
 
 A finding is **closed** when the behaviour it describes is implemented and tested. It is **partly
 closed** when part of it is. It is **open** when it is not. Nothing is closed because it is
@@ -13,11 +15,14 @@ documented; only because it is done.
 
 | Area | Findings | Closed | Partly closed | Open |
 | --- | --- | --- | --- | --- |
-| Privacy | 8 | 1 | 1 | 6 |
-| Security | 16 | 5 | 1 | 10 |
+| Privacy | 9 | 3 | 4 | 2 |
+| Security | 18 | 8 | 0 | 10 |
 | Accessibility | 4 | 0 | 1 | 3 |
-| Regulatory | 11 | 0 | 0 | 11 |
-| **Total** | **37** | **6** | **3** | **28** |
+| Regulatory | 12 | 3 | 3 | 6 |
+| **Total** | **43** | **14** | **8** | **21** |
+
+The review found 37 issues; four more were found while the work was being done, and are marked
+*(new)* in the tables below. The counts here are of all 43.
 
 The sign-off conditions of §8 of the review are listed at the end, with their state.
 
@@ -26,13 +31,14 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | Finding | Severity | State | What closed it, or what is missing |
 | --- | --- | --- | --- |
 | PRIV-01 A record could be cached by an intermediary | High | **closed** | Every response carries `Cache-Control: no-store` (`telemedicine/fhir/server.py`) |
-| PRIV-02 No consent is captured | High | open | Needs the notice, which is the practice's to write |
-| PRIV-03 Nothing is deleted, and no retention policy | High | open | Needs a written schedule, then a purge process |
-| PRIV-04 No route to an access or erasure request | High | open | Needs a legal position on the lawful basis |
+| PRIV-02 No consent is captured | High | partly closed | The machinery exists: `telemedicine/consent.py` records a consent for each optional purpose separately, withdraws them one at a time, and keeps the record of the notice apart from the consents (`db/consent_schema.sql`, append-only, like the audit log); the draft notice and the four draft consents are in `docs/compliance/privacy-notice-draft.md`. Missing: the wording is not marked up by an adviser, and the service is not exposed over HTTP, so no patient can withdraw a consent yet |
+| PRIV-03 Nothing is deleted, and no retention policy | High | partly closed | The requirement is now known — section 27(1)(e) of the NDPA requires the notice to state a retention period — and the draft schedule is in `docs/compliance/nigeria.md` §5. Nothing is deleted, deliberately: the clinical period is set by the National Health Act 2014 and the Medical and Dental Council, and the operative clause could not be read from the gazette scan. Missing: the confirmed periods, and the deletion job |
+| PRIV-04 No route to an access or erasure request | High | open | The lawful basis is now known — section 30(1)(g) of the NDPA: medical care, under the responsibility of a professional owing a duty of confidentiality — so the route can be built. Missing: the route itself, and the answer to what may not be deleted |
 | PRIV-05 The prescription documents are not encrypted at rest | High | partly closed | The metadata is modelled (`db/prescription_schema.sql`) and the document store exists, but there is no object store and no encryption |
 | PRIV-06 A clinician receives the whole patient record | Medium | open | Needs a decision on what a consultation needs |
 | PRIV-07 The status code tells a caller a resource exists | Medium | partly closed | The refusal no longer explains itself (SEC-03); the `403`/`404` difference is still there, by choice |
 | PRIV-08 The audit log holds identifiers, not clinical content | — | **closed** | A strength, preserved by the schema and the stores |
+| *(new)* No breach report could be produced | — | **closed** | `scripts/report_breach.py` assembles the section 40(2) report from the audit log — the categories and approximate numbers of data subjects and records concerned — and says on its face which parts only the controller can decide |
 
 ## Security
 
@@ -70,17 +76,18 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 
 | Finding | Severity | State | What is missing |
 | --- | --- | --- | --- |
-| REG-01 The jurisdiction is not established | **Critical** | open | The practice names it, and a qualified professional answers REG-02 to REG-07 against it |
-| REG-02 The medication catalogue is local | High | open | The national drug terminology of the jurisdiction, verified against a terminology server |
+| REG-01 The jurisdiction is not established | **Critical** | **closed** | **Nigeria**, answered by the practice on 2026-10-20, and confirmed against the Nigeria Data Protection Act 2023 and the National Health Act 2014. The answers and the sources are in `docs/compliance/nigeria.md` |
+| REG-02 The medication catalogue is local | High | partly closed | The answer: there is no national medication terminology in force yet, so a prescription must carry both an international code (RxNorm, with SNOMED CT or ATC alongside) for the safety checks, and the local identity (brand name and NAFDAC number) for dispensing. The statutory list is the Essential Drugs List under section 39 of the National Health Act 2014. Missing: the prescription document does not carry the brand or the NAFDAC number yet, and the Essential Drugs List is not embedded |
 | REG-03 A prescription is a document, not a transmission | High | open | A decision on paper or electronic, and the rules for that choice |
 | REG-04 Nothing stops a prescription for a controlled substance | High | open | Refuse anything outside the approved catalogue; refuse controlled substances outright |
 | REG-05 The patient's location is never established | Medium | open | Capture it, or record that it was confirmed |
 | REG-06 Nothing says the service is not for emergencies | Medium | open | A statement in the client and in the terms |
 | REG-07 No clinical safety process | Medium | open | The practice's clinical governance |
-| REG-08 HIPAA has not been addressed | Medium | open | The full set, in the order the adviser gives |
-| REG-09 GDPR has not been addressed | Medium | open | The same |
+| REG-08 HIPAA has not been addressed | Medium | **closed** | Not applicable: the practice and its patients are in Nigeria, and the United States' regime does not reach them. The applicable regime is the NDPA 2023 and the National Health Act 2014. This closes only for as long as every patient is in Nigeria |
+| REG-09 GDPR has not been addressed | Medium | **closed** | Not applicable, for the same reason as REG-08. A patient who is in the European Economic Area, or a provider whose servers are, brings the question back — which is why the media server is to be run in Nigeria (`docs/compliance/nigeria.md` §7) |
 | REG-10 The single-clinician assumption | Low | open | A third role, and the access review that goes with it |
-| REG-11 No consent to the telehealth consultation | Low | open | With PRIV-02 |
+| *(new)* A media provider outside Nigeria would be an unlawful transfer | — | partly closed | Section 41 of the NDPA forbids transferring personal data out of Nigeria without an adequate basis, and section 44 requires the country of any transfer to be named in the registration. The decision is recorded: the media server is to be run by the practice, in Nigeria. Missing: the transport interface, and the place to record a transfer basis |
+| REG-11 No consent to the telehealth consultation | Low | partly closed | The telehealth consultation is part of the care record, and is made under section 30(1)(g) of the NDPA rather than by consent; the draft notice says so, and the notice covers the video provider. Missing: the notice is not shown to anyone yet, and the capture is not exposed over HTTP |
 
 ## The sign-off conditions
 
@@ -88,15 +95,15 @@ The conditions of §8 of the review, and where each one stands.
 
 | # | Condition | State |
 | --- | --- | --- |
-| 1 | REG-01 is answered | open — the practice's to do, and everything else waits on it |
-| 2 | Consent capture is implemented | open |
-| 3 | The retention schedule and the erasure position | open |
+| 1 | REG-01 is answered | **closed** — Nigeria, answered on 2026-10-20 and confirmed against the law |
+| 2 | Consent capture is implemented | partly — the machinery, the table and the drafts are done; the service is not exposed over HTTP, and the wording is not marked up |
+| 3 | The retention schedule and the erasure position | partly — the schedule is drafted and the requirement is known; the periods and the erasure position are not |
 | 4 | The lockout, TLS and a durable audit log | **two of three closed** — the lockout and the audit log are done; TLS is a deployment's job |
 | 5 | A user interface, assessed against WCAG 2.1 AA | open |
 | 6 | QA-001: every criterion has a test, and CI runs them | **closed** — 40 of the criteria are covered and the check fails the build if one loses its test; the remaining 13 are named with the reason |
-| 7 | OPS-002: a staging deployment and an end-to-end acceptance | open |
+| 7 | OPS-002: a staging deployment and an end-to-end acceptance | open — the repository side is built (`feature/ops-002-deployment`, not yet merged); the deployment itself needs a host, a certificate and a media provider |
 | 8 | An independent review | open — and this document does not change that: the review was done by the author of the code |
 
-**Two of the eight conditions are met, one is half met, and five are open.** The engineering work
-that remains in the two open engineering conditions is small and named; the rest of the list needs
-the practice to answer a question first.
+**Two of the eight conditions are met, three are partly met, and three are open.** The engineering
+work that remains in the partly met conditions is small and named; the rest of the list needs the
+practice to answer a question first.

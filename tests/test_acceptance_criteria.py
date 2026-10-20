@@ -40,6 +40,7 @@ EXPECTED_CRITERIA = (
     "AC-SEC-01", "AC-SEC-02", "AC-SEC-03", "AC-SEC-04", "AC-SEC-05", "AC-SEC-06", "AC-SEC-07",
     "AC-SEC-08", "AC-SEC-09", "AC-SEC-10",
     "AC-DATA-01", "AC-DATA-02", "AC-DATA-03", "AC-DATA-04", "AC-DATA-05",
+    "AC-CONSENT-01", "AC-CONSENT-02", "AC-CONSENT-03", "AC-BREACH-01",
     "AC-GATE-01", "AC-GATE-02", "AC-GATE-03", "AC-GATE-04", "AC-GATE-05", "AC-GATE-06",
     "AC-GATE-07", "AC-GATE-08", "AC-GATE-09", "AC-GATE-10", "AC-GATE-11",
 )
@@ -110,7 +111,12 @@ class TraceabilityDocumentTest(unittest.TestCase):
         for row in self.rows:
             criterion = row[0]
             with self.subTest(criterion=criterion):
-                self.assertGreaterEqual(len(row), 6, f"{criterion} has too few columns")
+                # Exactly six: a row that has grown a column has had a
+                # paste gone wrong, and the extra cell is invisible in a
+                # rendered table.
+                self.assertEqual(len(row), 6,
+                                 f"{criterion} has {len(row)} columns, not six: "
+                                 "a row has been pasted into another one")
                 self.assertTrue(row[1], f"{criterion} has no criterion text")
                 self.assertIn(row[2], STATUSES,
                               f"{criterion} has the status '{row[2]}', which is not one of "
