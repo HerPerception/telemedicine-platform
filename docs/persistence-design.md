@@ -228,15 +228,45 @@ refused, and there is one active appointment at the end.
 | `telemedicine/auth.py` | The lockout; the unknown actor has no id | SEC-04; and the type mismatch above |
 | `tests/test_schema.py`, `tests/test_auth_schema.py`, `tests/test_prescription_schema.py` | The schema parser knows about `IF NOT EXISTS` | The files changed shape |
 
+## 7a. The application, assembled
+
+The last piece of the deployment story: one place that builds the application
+from a configuration, so that a deployment wires it the same way every time.
+
+`telemedicine/config.py` reads the settings from the environment —
+`TELEMEDICINE_DATABASE_URL`, `TELEMEDICINE_HOST`, `TELEMEDICINE_PORT` — and
+`telemedicine/application.py` assembles the services from them:
+
+* **with a database**, every store is the database one: the records, the
+  audit log, the lockout counter, the accounts, the sessions and the
+  prescription documents. The application can then run in more than one
+  instance;
+* **without one**, the same services with the records in memory, which is
+  what the tests use.
+
+The audit log is shared by every service in the assembly, because one trail is
+the only kind of trail that is a trail.
+
+`scripts/run_server.py` is the entry point. It **does not apply the schema**:
+applying it is a deployment step, done once with `scripts/apply_schema.py`,
+because a process that starts should not change the shape of the database
+underneath it. It also warns, loudly, when it is running without a database.
+
+The end-to-end test is the one that matters: it builds the application the
+way a deployment does, runs it over a real socket against a real database, and
+then does what a patient does — register, sign in, book a slot the clinician
+opened, read the booking back through the FHIR API, and be refused when they
+ask for somebody else's.
+
 ## 8. Known gaps
 
-1. **The services still default to the in-memory repository.** The database implementation exists
-   and the tests use it, but a deployment has to pass it in — or the application has to choose it
-   when a connection string is set. That is a small change, and it is the last thing between this
-   project and a deployment that keeps its records.
+1. **A deployment still needs a few things this project does not have.** The application is
+   assembled and it keeps its records, but it speaks plain HTTP, opens a connection per operation,
+   and has no migration history. A deployment behind a TLS-terminating proxy, with a connection
+   pool and a migration tool, is the work that is left — none of it is in the application.
 2. **The clinical repositories are new code that a deployment will meet on its first request.** They
-   are covered by the tests, and by the tests that write a whole clinical chain through them, but
-   they have not been exercised against a real workload.
+   are covered by the tests, and by the tests that write a whole clinical chain through them, and by
+   the end-to-end test, but they have not been exercised against a real workload.
 3. **No migration history.** The schema is applied by re-running the files, which works because
    they are re-runnable — but there is no record of which version a database was built from, and no
    way to step a database forward one version at a time. A deployment that changes a table needs a
