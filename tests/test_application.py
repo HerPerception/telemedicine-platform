@@ -124,9 +124,12 @@ class EndToEndTest(unittest.TestCase):
             request.add_header("Content-Type", "application/json")
         try:
             with urllib.request.urlopen(request, data=data, timeout=15) as response:
-                return response.status, json.loads(response.read().decode("utf-8"))
+                body = response.read().decode("utf-8")
+                # A 204 has no body, and that is not an error.
+                return response.status, (json.loads(body) if body else None)
         except urllib.error.HTTPError as error:
-            return error.code, json.loads(error.read().decode("utf-8"))
+            body = error.read().decode("utf-8")
+            return error.code, (json.loads(body) if body else None)
 
     def register(self, email, role, record_id):
         from telemedicine.models import Role
@@ -237,6 +240,46 @@ class EndToEndTest(unittest.TestCase):
         status, body = self.request("GET", "/fhir/Patient/patient-1")
         self.assertEqual(status, 401)
         self.assertEqual(body["issue"][0]["code"], "login")
+
+    def test_a_patient_withdraws_a_consent_and_the_record_survives(self):
+        patient_id, _practitioner_id, patient_token, _practitioner_token = \
+            self.add_patient_and_practitioner()
+
+        # The notice, then a consent for one optional purpose.
+        status, state = self.request("POST", "/fhir/consent/notice", patient_token,
+                                     {"notice_version": "2026-10-21"})
+        self.assertEqual(status, 201)
+        self.assertTrue(state["notice_acknowledged"])
+
+        status, state = self.request("POST", "/fhir/consent/research", patient_token,
+                                     {"notice_version": "2026-10-21"})
+        self.assertEqual(status, 201)
+        self.assertEqual(_purpose(state, "research")["state"], "granted")
+
+        # It is in the database, not in the memory of the process: an
+        # application built again against the same database sees it.
+        from telemedicine.application import build_application
+        from telemedicine.config import Settings
+        reopened = build_application(Settings(database_url=self.database.dsn))
+        account = self.application.auth.users.get_by_email(
+            f"ada-{patient_id[:8]}@example.org")
+        self.assertTrue(reopened.consents.has_consent(account.user_id, "research"))
+
+        # And the patient can take it back, in one request.
+        status, _body = self.request("DELETE", "/fhir/consent/research", patient_token)
+        self.assertEqual(status, 204)
+        status, state = self.request("GET", "/fhir/consent", patient_token)
+        self.assertEqual(_purpose(state, "research")["state"], "withdrawn")
+
+        # The withdrawal is in the database as well.
+        self.assertFalse(reopened.consents.has_consent(account.user_id, "research"))
+
+
+def _purpose(state, purpose):
+    for entry in state["purposes"]:
+        if entry["purpose"] == purpose:
+            return entry
+    raise AssertionError(f"no entry for '{purpose}'")
 
 
 if __name__ == "__main__":

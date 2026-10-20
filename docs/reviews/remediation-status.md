@@ -15,11 +15,11 @@ documented; only because it is done.
 
 | Area | Findings | Closed | Partly closed | Open |
 | --- | --- | --- | --- | --- |
-| Privacy | 9 | 3 | 4 | 2 |
+| Privacy | 9 | 4 | 3 | 2 |
 | Security | 18 | 8 | 0 | 10 |
 | Accessibility | 4 | 0 | 1 | 3 |
-| Regulatory | 12 | 3 | 3 | 6 |
-| **Total** | **43** | **14** | **8** | **21** |
+| Regulatory | 12 | 4 | 2 | 6 |
+| **Total** | **43** | **16** | **6** | **21** |
 
 The review found 37 issues; four more were found while the work was being done, and are marked
 *(new)* in the tables below. The counts here are of all 43.
@@ -31,7 +31,7 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | Finding | Severity | State | What closed it, or what is missing |
 | --- | --- | --- | --- |
 | PRIV-01 A record could be cached by an intermediary | High | **closed** | Every response carries `Cache-Control: no-store` (`telemedicine/fhir/server.py`) |
-| PRIV-02 No consent is captured | High | partly closed | The machinery exists: `telemedicine/consent.py` records a consent for each optional purpose separately, withdraws them one at a time, and keeps the record of the notice apart from the consents (`db/consent_schema.sql`, append-only, like the audit log); the draft notice and the four draft consents are in `docs/compliance/privacy-notice-draft.md`. Missing: the wording is not marked up by an adviser, and the service is not exposed over HTTP, so no patient can withdraw a consent yet |
+| PRIV-02 No consent is captured | High | **closed** | `telemedicine/consent.py` records a consent for each optional purpose separately, withdraws them one at a time, and keeps the record of the notice apart from the consents (`db/consent_schema.sql`, append-only, like the audit log). ENG-015 put it behind an API, so a patient can grant and withdraw over HTTP — one request each, which is what section 35 of the Act asks for — and a clinician who treats them can read the state but change nothing (`docs/consent-design.md`). The draft notice and the four draft consents are in `docs/compliance/privacy-notice-draft.md`; the *wording* is the practice's document and is not marked up yet, which is an action for the practice rather than a gap in the software |
 | PRIV-03 Nothing is deleted, and no retention policy | High | partly closed | The requirement is now known — section 27(1)(e) of the NDPA requires the notice to state a retention period — and the draft schedule is in `docs/compliance/nigeria.md` §5. Nothing is deleted, deliberately: the clinical period is set by the National Health Act 2014 and the Medical and Dental Council, and the operative clause could not be read from the gazette scan. Missing: the confirmed periods, and the deletion job |
 | PRIV-04 No route to an access or erasure request | High | open | The lawful basis is now known — section 30(1)(g) of the NDPA: medical care, under the responsibility of a professional owing a duty of confidentiality — so the route can be built. Missing: the route itself, and the answer to what may not be deleted |
 | PRIV-05 The prescription documents are not encrypted at rest | High | partly closed | The metadata is modelled (`db/prescription_schema.sql`) and the document store exists, but there is no object store and no encryption |
@@ -87,7 +87,7 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | REG-09 GDPR has not been addressed | Medium | **closed** | Not applicable, for the same reason as REG-08. A patient who is in the European Economic Area, or a provider whose servers are, brings the question back — which is why the media server is to be run in Nigeria (`docs/compliance/nigeria.md` §7) |
 | REG-10 The single-clinician assumption | Low | open | A third role, and the access review that goes with it |
 | *(new)* A media provider outside Nigeria would be an unlawful transfer | — | partly closed | Section 41 of the NDPA forbids transferring personal data out of Nigeria without an adequate basis, and section 44 requires the country of any transfer to be named in the registration. The decision is recorded: the media server is to be run by the practice, in Nigeria. Missing: the transport interface, and the place to record a transfer basis |
-| REG-11 No consent to the telehealth consultation | Low | partly closed | The telehealth consultation is part of the care record, and is made under section 30(1)(g) of the NDPA rather than by consent; the draft notice says so, and the notice covers the video provider. Missing: the notice is not shown to anyone yet, and the capture is not exposed over HTTP |
+| REG-11 No consent to the telehealth consultation | Low | **closed** | The consultation is part of the care record and is made under section 30(1)(g) of the NDPA rather than by consent; the notice says so and covers the video provider, and the consent capture the notice depends on is implemented. What remains is the practice's wording, as with PRIV-02 |
 
 ## The sign-off conditions
 
@@ -96,7 +96,7 @@ The conditions of §8 of the review, and where each one stands.
 | # | Condition | State |
 | --- | --- | --- |
 | 1 | REG-01 is answered | **closed** — Nigeria, answered on 2026-10-20 and confirmed against the law |
-| 2 | Consent capture is implemented | partly — the machinery, the table and the drafts are done; the service is not exposed over HTTP, and the wording is not marked up |
+| 2 | Consent capture is implemented | **closed** — one consent per optional purpose, each withdrawable on its own, durable, audited and reachable over HTTP. The wording of the notice is the practice's, and is not marked up |
 | 3 | The retention schedule and the erasure position | partly — the schedule is drafted and the requirement is known; the periods and the erasure position are not |
 | 4 | The lockout, TLS and a durable audit log | **two of three closed** — the lockout and the audit log are done; TLS is a deployment's job |
 | 5 | A user interface, assessed against WCAG 2.1 AA | open |
@@ -104,6 +104,6 @@ The conditions of §8 of the review, and where each one stands.
 | 7 | OPS-002: a staging deployment and an end-to-end acceptance | open — the repository side is built (`feature/ops-002-deployment`, not yet merged); the deployment itself needs a host, a certificate and a media provider |
 | 8 | An independent review | open — and this document does not change that: the review was done by the author of the code |
 
-**Two of the eight conditions are met, three are partly met, and three are open.** The engineering
+**Three of the eight conditions are met, two are partly met, and three are open.** The engineering
 work that remains in the partly met conditions is small and named; the rest of the list needs the
 practice to answer a question first.

@@ -235,6 +235,20 @@ class RecordsService:
     def patient_record(self, patient_id: str) -> Optional[PatientRecord]:
         return self.repository.get_patient(patient_id)
 
+    def patient_access_scope(self, patient_id: str) -> AccessScope:
+        """The access scope of a patient's record.
+
+        This is for checks that are *not* reads of the record itself — the
+        consent state of a patient, for instance, which a clinician who
+        treats them may see without the clinical record being read.
+
+        The scope carries the patient's own account id in ``owner_user_id``,
+        which is where a consent record is keyed: a consent belongs to the
+        account, not to the clinical row.
+        """
+        patient = self._require_patient(patient_id)
+        return self._patient_scope(patient)
+
     def practitioner_record(self, practitioner_id: str) -> Optional[PractitionerRecord]:
         return self.repository.get_practitioner(practitioner_id)
 

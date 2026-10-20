@@ -46,6 +46,9 @@ class ResourceType(str, enum.Enum):
     # Added by ENG-003 (appointment booking and schedule management): the
     # bookable windows in a practitioner's schedule.
     SLOT = "slot"
+    # Added by ENG-015 (the consent record): what a patient has agreed to,
+    # and what they have withdrawn.
+    CONSENT = "consent"
 
     def __str__(self) -> str:  # pragma: no cover - convenience only
         return self.value
@@ -175,6 +178,20 @@ RULES: Tuple[Rule, ...] = (
          "a practitioner may update their own record"),
     Rule(Role.PRACTITIONER, ResourceType.ENCOUNTER, Action.UPDATE, TREATING,
          "a practitioner may update an encounter they delivered"),
+
+    # --- ENG-015: the consent record -------------------------------------
+    # A patient reads and changes their own consents, and nothing else. A
+    # clinician who treats the patient may read the state — because they
+    # have to know whether the patient agreed before they use a record for a
+    # research purpose — but may not grant or withdraw anything: consent is
+    # the patient's own act, and a clinician who could press a button on
+    # their behalf could take it away.
+    Rule(Role.PATIENT, ResourceType.CONSENT, Action.READ, OWN,
+         "a patient may read their own consent record"),
+    Rule(Role.PATIENT, ResourceType.CONSENT, Action.UPDATE, OWN,
+         "a patient may grant and withdraw their own consent"),
+    Rule(Role.PRACTITIONER, ResourceType.CONSENT, Action.READ, TREATING,
+         "a practitioner may read the consent record of a patient they treat"),
 )
 
 

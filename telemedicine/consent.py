@@ -41,6 +41,13 @@ from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from telemedicine.audit import OUTCOME_DENIED, OUTCOME_SUCCESS, AuditLog
+from telemedicine.authorization import (
+    AccessScope,
+    Action,
+    Authorizer,
+    ResourceType,
+)
+from telemedicine.errors import AuthorizationError, ValidationError
 
 # The optional uses that need a consent of their own. The clinical record is
 # not one of them: it is made under S.30(1)(g) of the NDPA.
@@ -135,13 +142,29 @@ class InMemoryConsentStore(ConsentStore):
 
 
 class ConsentService:
-    """Grants, withdrawals, and the question "may we do this?"."""
+    """Grants, withdrawals, and the question "may we do this?".
+
+    The service answers two kinds of question:
+
+    * **the patient's** — what have they agreed to, and what have they
+      withdrawn? Only they may change it.
+    * **the clinician's** — has this patient agreed to this purpose? They may
+      read the state of a patient they treat, because they have to know
+      before they use a record for a research purpose. They may not change
+      it: consent is the patient's own act.
+    """
 
     def __init__(self, store: Optional[ConsentStore] = None,
-                 audit: Optional[AuditLog] = None, clock=None):
+                 audit: Optional[AuditLog] = None, clock=None,
+                 records=None, authorizer=None):
         self.store = store if store is not None else InMemoryConsentStore()
         self.audit = audit
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        # The clinical records, for the scope of a patient. It is optional:
+        # without it the service cannot answer a clinician's question, and
+        # says so rather than guessing.
+        self.records = records
+        self.authorizer = authorizer if authorizer is not None else Authorizer()
 
     # -- recording ---------------------------------------------------------
 
@@ -156,7 +179,7 @@ class ConsentService:
         """
         event = self._event(user_id, ACKNOWLEDGED, None, notice_version, method, evidence)
         self.store.append(event)
-        self._audit(user_id, "consent.notice_acknowledged", event, OUTCOME_SUCCESS)
+        self._audit_event(user_id, "consent.notice_acknowledged", event, OUTCOME_SUCCESS)
         return event
 
     def grant(self, user_id: str, purpose: str, notice_version: str,
@@ -171,7 +194,7 @@ class ConsentService:
                 "covers it.")
         event = self._event(user_id, GRANTED, purpose, notice_version, method, evidence)
         self.store.append(event)
-        self._audit(user_id, "consent.granted", event, OUTCOME_SUCCESS)
+        self._audit_event(user_id, "consent.granted", event, OUTCOME_SUCCESS)
         return event
 
     def withdraw(self, user_id: str, purpose: str,
@@ -183,7 +206,7 @@ class ConsentService:
         """
         event = self._event(user_id, WITHDRAWN, purpose, "", method, evidence)
         self.store.append(event)
-        self._audit(user_id, "consent.withdrawn", event, OUTCOME_SUCCESS)
+        self._audit_event(user_id, "consent.withdrawn", event, OUTCOME_SUCCESS)
         return event
 
     # -- asking ------------------------------------------------------------
@@ -213,7 +236,165 @@ class ConsentService:
         """Everything that happened, in order."""
         return sorted(self.store.events_for(user_id), key=lambda event: event.occurred_at)
 
+    # -- what an actor may do ----------------------------------------------
+
+    def state_for_actor(self, actor) -> Dict:
+        """The actor's own consent state.
+
+        This is what a patient sees when they ask what they have agreed to.
+        It is not a clinical read, so it is not an access to anyone's record
+        beyond their own.
+        """
+        return self.state_for_user(actor.user_id)
+
+    def state_for_user(self, user_id: str) -> Dict:
+        """The consent state of one account."""
+        events = self.history(user_id)
+        acknowledgement = None
+        for event in events:
+            if event.kind == ACKNOWLEDGED:
+                acknowledgement = event
+
+        purposes = []
+        for purpose in OPTIONAL_PURPOSES:
+            state = self.current_state(user_id, purpose)
+            last = self._last_event(events, purpose)
+            purposes.append({
+                "purpose": purpose,
+                "description": PURPOSE_DESCRIPTIONS[purpose],
+                # ``not_granted`` is the absence of a decision, which is
+                # different from a decision not to agree.
+                "state": state if state is not None else "not_granted",
+                "notice_version": last.notice_version if last else None,
+                "changed_at": _isoformat(last.occurred_at) if last else None,
+            })
+
+        return {
+            "notice_acknowledged": acknowledgement is not None,
+            "notice_version": acknowledgement.notice_version if acknowledgement else None,
+            "notice_acknowledged_at": (
+                _isoformat(acknowledgement.occurred_at) if acknowledgement else None),
+            "purposes": purposes,
+        }
+
+    def state_for_patient(self, actor, patient_id: str) -> Dict:
+        """The consent state of a patient, for a clinician who treats them.
+
+        The patient is found through the clinical records, because that is
+        where the treatment relationship — and so the access — comes from.
+        """
+        if self.records is None:
+            raise ValidationError(
+                "the consent service has no clinical records, so it cannot "
+                "decide who may see a patient's consents")
+        try:
+            scope = self.records.patient_access_scope(patient_id)
+        except ValidationError:
+            # A patient id that is not there, and one the caller may not see,
+            # have to look the same. Otherwise the endpoint is a way of
+            # finding out which patients the practice has.
+            self._audit(actor, "consent.viewed", patient_id, OUTCOME_DENIED,
+                        f"read the consent state of patient {patient_id}")
+            raise AuthorizationError(
+                "not permitted", resource_type="consent", resource_id=patient_id,
+                action="read")
+        self._authorize(actor, Action.READ, ResourceType.CONSENT, scope,
+                        patient_id, audit_action="consent.viewed",
+                        detail=f"read the consent state of patient {patient_id}")
+        state = self.state_for_user(scope.owner_user_id)
+        return state
+
+    def grant_for_actor(self, actor, purpose: str, notice_version: str,
+                        method: str = "web", evidence: Optional[str] = None) -> Dict:
+        """Record the actor's own consent for one optional purpose.
+
+        Only a patient may do this. A clinician who could press the button
+        on their behalf could take the consent away as well.
+        """
+        self._require_own_consent(actor)
+        self.grant(actor.user_id, purpose, notice_version, method=method,
+                   evidence=evidence)
+        return self.state_for_user(actor.user_id)
+
+    def withdraw_for_actor(self, actor, purpose: str, method: str = "web",
+                           evidence: Optional[str] = None) -> Dict:
+        """Withdraw the actor's own consent for one optional purpose."""
+        self._require_own_consent(actor)
+        self.withdraw(actor.user_id, purpose, method=method, evidence=evidence)
+        return self.state_for_user(actor.user_id)
+
+    def acknowledge_for_actor(self, actor, notice_version: str,
+                              method: str = "web",
+                              evidence: Optional[str] = None) -> Dict:
+        """Record that the actor was shown the notice."""
+        self._require_own_consent(actor)
+        self.acknowledge_notice(actor.user_id, notice_version, method=method,
+                                evidence=evidence)
+        return self.state_for_user(actor.user_id)
+
+    def may_use_for_purpose(self, user_id: str, purpose: str) -> bool:
+        """Whether a record may be used for an optional purpose.
+
+        This is the question a clinician asks before using a record for
+        research, and it is asked about the patient's account, not about the
+        clinician: the answer is the patient's decision, whoever is asking.
+        """
+        return self.has_consent(user_id, purpose)
+
     # -- internals ---------------------------------------------------------
+
+    def _require_own_consent(self, actor) -> None:
+        """Refuse unless the actor may change their own consents.
+
+        The change itself is audited by the event it produces, so only a
+        refusal is written here: two entries for one change would make the
+        trail harder to read, not easier.
+        """
+        scope = AccessScope(owner_user_id=actor.user_id)
+        self._authorize(actor, Action.UPDATE, ResourceType.CONSENT, scope,
+                        actor.user_id, audit_action="consent.changed",
+                        detail="change their own consents", audit_success=False)
+
+    def _authorize(self, actor, action: Action, resource_type: ResourceType,
+                   scope: AccessScope, resource_id: str, *, audit_action: str,
+                   detail: str, audit_success: bool = True) -> None:
+        """Authorize, audit the outcome, and raise if it was refused.
+
+        The refusal is audited as well as the acceptance: a caller who was
+        refused is exactly the thing an audit trail exists to show.
+        """
+        decision = self.authorizer.decide(actor, action, resource_type, scope)
+        if decision.allowed:
+            if audit_success:
+                self._audit(actor, audit_action, resource_id, OUTCOME_SUCCESS, detail)
+            return
+        self._audit(actor, audit_action, resource_id, OUTCOME_DENIED, detail)
+        raise AuthorizationError(
+            decision.reason, resource_type=resource_type.value,
+            resource_id=resource_id, action=action.value)
+
+    @staticmethod
+    def _last_event(events: List[ConsentEvent], purpose: str) -> Optional[ConsentEvent]:
+        last = None
+        for event in events:
+            if event.purpose == purpose:
+                last = event
+        return last
+
+    def _audit(self, actor, action: str, resource_id: str, outcome: str,
+               detail: str) -> None:
+        """One entry in the audit trail."""
+        if self.audit is None:
+            return
+        self.audit.append(
+            actor_user_id=actor.user_id,
+            actor_role=actor.role.value,
+            action=action,
+            resource_type="consent",
+            resource_id=resource_id,
+            outcome=outcome,
+            detail=detail,
+        )
 
     def _event(self, user_id: str, kind: str, purpose: Optional[str],
               notice_version: str, method: str,
@@ -229,7 +410,9 @@ class ConsentService:
             evidence=evidence,
         )
 
-    def _audit(self, user_id: str, action: str, event: ConsentEvent, outcome: str) -> None:
+    def _audit_event(self, user_id: str, action: str, event: ConsentEvent,
+                     outcome: str) -> None:
+        """The entry for a consent event itself."""
         if self.audit is None:
             return
         self.audit.append(
@@ -252,3 +435,10 @@ def notice_digest(text: str) -> str:
     separated from the words the patient actually read.
     """
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _isoformat(moment: datetime) -> str:
+    """An instant as the API writes it: UTC, with a Z."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")

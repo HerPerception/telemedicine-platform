@@ -33,10 +33,12 @@ from typing import Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from telemedicine.auth import AuthService
+from telemedicine.consent_api import ConsentEndpoints
 from telemedicine.errors import (
     AuthenticationError,
     AuthorizationError,
     ConflictError,
+    NotFoundError,
     TelemedicineError,
     ValidationError,
 )
@@ -67,12 +69,18 @@ class FhirApplication:
     """Routes a request to the repository and builds the response."""
 
     def __init__(self, repository: FhirRepository, auth: AuthService,
-                 base_path: str = "/fhir", trust_forwarded_for: bool = False):
+                 base_path: str = "/fhir", trust_forwarded_for: bool = False,
+                 consent=None):
         self.repository = repository
         self.auth = auth
         self.base_path = base_path.rstrip("/")
         # Signing in and out, and the address the request came from.
         self.sessions = SessionEndpoints(auth, trust_forwarded_for=trust_forwarded_for)
+        # The consent endpoints. They are optional here so that a caller
+        # that only wants the clinical API does not have to build a consent
+        # service; the endpoint then says that it is not configured rather
+        # than pretending that nobody has consented to anything.
+        self.consent = ConsentEndpoints(consent) if consent is not None else None
 
     # -- the entry point ---------------------------------------------------
 
@@ -96,6 +104,8 @@ class FhirApplication:
             return self._outcome(403, "forbidden", detail)
         except ConflictError as error:
             return self._outcome(409, "conflict", str(error))
+        except NotFoundError as error:
+            return self._outcome(404, "not-found", str(error))
         except ValidationError as error:
             return self._outcome(400, "invalid", str(error))
         except TelemedicineError as error:
@@ -120,6 +130,9 @@ class FhirApplication:
                 self.sessions.sign_out(headers)
                 return Response(status=204, body=b"", headers={})
             return self._method_not_allowed(method)
+
+        if remainder == "consent" or remainder.startswith("consent/"):
+            return self._consent(method, remainder, query, headers, body)
 
         segments = [segment for segment in remainder.split("/") if segment]
         resource_type = segments[0]
@@ -152,6 +165,27 @@ class FhirApplication:
         return self._method_not_allowed(method)
 
     # -- the operations ----------------------------------------------------
+
+    def _consent(self, method: str, remainder: str, query, headers,
+                 body) -> Response:
+        """The consent endpoints.
+
+        What a patient has agreed to, and what they have withdrawn. A
+        clinician may read the state of a patient they treat; nobody but the
+        patient may change it.
+        """
+        if self.consent is None:
+            return self._outcome(404, "not-found",
+                                 "the consent service is not configured")
+        actor = self._authenticate(headers)
+        status, payload = self.consent.handle(method, remainder, query, actor, body)
+        if status == 204:
+            # No content, but the same headers as every other response: a
+            # consent decision is personal data too.
+            response = self._json(204, {})
+            response.body = b""
+            return response
+        return self._json(status, payload)
 
     def _read(self, actor, resource_type: str, resource_id: str) -> Response:
         if resource_id not in self.repository.known_ids().get(resource_type, set()):

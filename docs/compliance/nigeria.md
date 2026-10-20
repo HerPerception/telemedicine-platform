@@ -110,9 +110,14 @@ old one, so what the patient agreed to and when they stopped agreeing to it can 
 table is `consent_event` (`db/consent_schema.sql`), and the database refuses an update, a delete and
 a truncate on it.
 
-**What it does not do yet.** The service is not exposed over HTTP — there is no endpoint a patient
-can call to withdraw a consent, and the practice's staff cannot see the consent state from the
-administrative side. That is the next piece of work (§13).
+**What it does over HTTP.** ENG-015 put the service behind an API: `GET /fhir/consent` for the
+patient's own state, `POST /fhir/consent/<purpose>` to grant, `DELETE /fhir/consent/<purpose>` to
+withdraw, and `POST /fhir/consent/notice` for the acknowledgement. A clinician who treats the
+patient may read the state — they have to know before they use a record for a research purpose — and
+may change nothing. The endpoints are in `docs/consent-design.md`.
+
+So the withdrawal is one request, which is what section 35 asks for: it has to be "as easy for the
+data subject to withdraw, as to give consent".
 
 The draft wording for both the notice and the optional-use consents is in
 `docs/compliance/privacy-notice-draft.md`. **It is a draft, and it is marked as one**: it is
@@ -324,8 +329,10 @@ and they are the last of the compliance review's blockers.
 
 The engineering work that follows from this document, in the order it should be done:
 
-1. **Expose the consent service over HTTP** — a patient endpoint to see and withdraw, a practitioner
-   endpoint to see the state before an optional use, and the notice acknowledgement on registration.
+1. ~~**Expose the consent service over HTTP**~~ — **done (ENG-015)**: the patient can see and
+   withdraw, and a clinician who treats them can see the state before an optional use. The notice
+   acknowledgement is an explicit act rather than part of registration, because there is no HTTP
+   sign-up to attach it to. `docs/consent-design.md`.
 2. **Carry the brand name and the NAFDAC number** on the prescription document and in the FHIR
    mapping (§6).
 3. **Apply the retention policy** — the deletion job, the "deleted" marker, and the audit entry for
@@ -337,4 +344,4 @@ The engineering work that follows from this document, in the order it should be 
    yet have (SEC-08).
 7. **The audit trail exported for the DPO** — the trail is there; the report is not.
 
-Items 1, 3 and 4 are the ones that the law puts a clock on.
+Items 3 and 4 are the ones the law puts a clock on. Item 1 was the third, and ENG-015 did it.
