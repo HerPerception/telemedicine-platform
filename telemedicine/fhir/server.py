@@ -83,7 +83,14 @@ class FhirApplication:
         except AuthenticationError as error:
             return self._outcome(401, "login", str(error), authenticate=True)
         except AuthorizationError as error:
-            return self._outcome(403, "forbidden", str(error))
+            # The reason a caller was refused is in the audit log, which the
+            # caller cannot read. The response says what happened, not why:
+            # a detailed reason would tell an unauthorised caller whether the
+            # resource exists and who it belongs to.
+            detail = "not permitted"
+            if error.action and error.resource_type:
+                detail = f"not permitted: {error.action} on {error.resource_type}"
+            return self._outcome(403, "forbidden", detail)
         except ConflictError as error:
             return self._outcome(409, "conflict", str(error))
         except ValidationError as error:
@@ -283,7 +290,14 @@ class FhirApplication:
         return Response(
             status=status,
             body=json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": serialization.FHIR_CONTENT_TYPE},
+            headers={
+                "Content-Type": serialization.FHIR_CONTENT_TYPE,
+                # A response may hold a patient's record. No intermediary and
+                # no browser may keep a copy of it.
+                "Cache-Control": "no-store, no-cache, must-revalidate, private",
+                "Pragma": "no-cache",
+                "X-Content-Type-Options": "nosniff",
+            },
         )
 
 

@@ -19,8 +19,7 @@ Two of the four capability criteria come from the README's MVP scope table, and 
 non-functional list. Where a criterion cannot be covered yet, the row says so and why.
 
 The gate rows refer to the compliance review of **OPS-001**,
-[`reviews/compliance-review.md`](reviews/compliance-review.md), which is on its own branch
-(`feature/ops-001-compliance-review`) and reaches the repository when that branch is merged. The
+[`reviews/compliance-review.md`](reviews/compliance-review.md), which is in the repository. The
 finding numbers in those rows — PRIV-02, SEC-05 and so on — are that review's.
 
 ## How to read the table

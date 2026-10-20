@@ -124,6 +124,13 @@ Recorded in `multi-agent-orchestrator/resolution.md`.
 
 ## 7. Known gaps
 
+> The open findings of the OPS-001 review, and the conditions for handling real patient
+> data, are in [`reviews/compliance-review.md`](reviews/compliance-review.md). This section
+> lists the gaps the feature itself knows about; the review ranks them and says which of
+> them block a deployment.
+
+
+
 1. **No persistence.** The API serves the in-memory application layer. The data is lost when the
    process ends, and the repositories are the ones ENG-002 left in memory.
 2. **No TLS.** The server speaks plain HTTP. A deployment must terminate TLS in front of it, and
