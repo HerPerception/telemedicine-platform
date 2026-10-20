@@ -34,6 +34,10 @@ refusing the table.
   `append` interface as the in-memory log of ENG-002, so a service can be given either.
 - **`telemedicine/persistence/lockout.py`** — the failed-attempt counter, in the `auth_lockout` table
   and in memory, behind one interface.
+- **`telemedicine/persistence/account_store.py`** — the accounts and the sessions, in the
+  `user_account` and `auth_session` tables.
+- **`telemedicine/persistence/document_store.py`** — the prescription documents, in the
+  `prescription_document` table.
 - **`db/security_schema.sql`** — the `auth_lockout` table.
 - **`pyproject.toml`** — the dependency manifest. The project now has **one** third-party
   dependency, the PostgreSQL driver.
@@ -149,6 +153,33 @@ victim's address can lock that account out by failing five times. That is a deni
 breach, and the fix is to count per address as well as per account, which needs the source address
 of the request — which the HTTP layer does not currently pass to the service.
 
+## 6a. The accounts, the sessions and the documents
+
+Three more pieces of state have the same property the lockout had: they have to be shared
+between the instances of the application, and they have to survive a restart.
+
+| State | Why it cannot live in one process |
+| --- | --- |
+| **the accounts** | An account created on one instance has to be known to the others, or a patient cannot sign in twice |
+| **the sessions** | A session issued on one instance has to be accepted by the others, or a request that lands on a different instance is refused and the patient is asked to sign in again. **This is the state that decides where a request may be load-balanced to** |
+| **the prescription documents** | The document is what a patient prints and takes to a pharmacy; it is a clinical record, and it has to outlive the process that rendered it |
+
+The implementations satisfy the interfaces of ENG-002 — the `UserRepository` and the
+`SessionStore` of `telemedicine.auth`, and the `DocumentStore` of `telemedicine.prescriptions` — so
+the services do not know whether they are talking to memory or to a database.
+
+The tests that matter are the cross-instance ones: an account registered on one service is
+authenticated by another, a session issued on one service is accepted by another, a revoked session is
+refused by another, and a document written by one store is read by another. The token is never stored
+in the clear — the `auth_session` table holds its SHA-256 digest, and the test checks that the token
+itself is nowhere in it.
+
+**The document cannot be changed, and it cannot be deleted.** The trigger of ENG-005 refused an
+`UPDATE`; it now refuses a `DELETE` as well, because a prescription that has been printed and handed
+to a pharmacy must not be able to disappear. The document's bytes live in a `bytea` column; a
+deployment would put them in the encrypted object store the architecture describes, behind the same
+interface.
+
 ## 7. Amendments to earlier features
 
 | File | Amendment | Why |
@@ -157,6 +188,7 @@ of the request — which the HTTP layer does not currently pass to the service.
 | `db/auth_schema.sql` | The tables, indexes and triggers made re-runnable; the comment on `actor_user_id` corrected | The comment said the application writes `'anonymous'` into a `uuid` column, which it cannot |
 | `db/prescription_schema.sql` | The tables, indexes and triggers made re-runnable | The same |
 | `telemedicine/audit.py` | The actor of an entry may be `None` | A login for an account that does not exist has no actor, and the column is a `uuid` |
+| `db/prescription_schema.sql` | A `body bytea` column, and the trigger now refuses a `DELETE` as well as an `UPDATE` | The document has to be stored somewhere, and it must not be able to disappear |
 | `telemedicine/auth.py` | The lockout; the unknown actor has no id | SEC-04; and the type mismatch above |
 | `tests/test_schema.py`, `tests/test_auth_schema.py`, `tests/test_prescription_schema.py` | The schema parser knows about `IF NOT EXISTS` | The files changed shape |
 
@@ -164,11 +196,12 @@ of the request — which the HTTP layer does not currently pass to the service.
 
 1. **The clinical data is still in memory.** The repositories of the application hold patients,
    appointments, encounters and prescriptions in dictionaries. The tables they belong to exist, and
-   the schema runs, but nothing writes to them yet. That is the next piece of work, and it is the
-   last thing between this project and a deployment.
-2. **The account and session tables are also unused.** `user_account` and `auth_session` are
-   created, and the audit log and the lockout use them, but the accounts themselves are still held
-   in memory.
+   the schema runs, and the test that writes a whole clinical chain proves the relationships hold —
+   but the services do not use them yet. That is the next piece of work, and it is the last big one
+   between this project and a deployment.
+2. **The account and session tables are used now**, and the tests write a real clinical chain
+   through them, but the *services* still default to the in-memory repositories: a deployment has to
+   pass the database ones in.
 3. **No migration history.** The schema is applied by re-running the files, which works because
    they are re-runnable — but there is no record of which version a database was built from, and no
    way to step a database forward one version at a time. A deployment that changes a table needs a

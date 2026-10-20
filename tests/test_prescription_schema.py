@@ -87,11 +87,26 @@ class PrescriptionSchemaTest(unittest.TestCase):
 
     def test_a_document_cannot_be_rewritten(self):
         self.assertIn("prescription_document_is_immutable", self.clean)
-        self.assertRegex(self.clean, r"BEFORE UPDATE ON prescription_document")
+        self.assertRegex(self.clean, r"BEFORE UPDATE OR DELETE ON prescription_document")
         self.assertIn("RAISE EXCEPTION 'prescription_document rows are immutable", self.clean)
 
+    def test_a_document_cannot_be_deleted_either(self):
+        # A prescription that has been printed and handed to a pharmacy must
+        # not be able to disappear.
+        self.assertRegex(self.clean, r"BEFORE UPDATE OR DELETE ON prescription_document")
+
+    def test_the_document_body_is_stored(self):
+        body = "\n".join(self.tables["prescription_document"])
+        self.assertIn("body", body)
+        self.assertIn("bytea", body)
+
     def test_the_schema_does_not_change_the_clinical_tables(self):
-        self.assertNotIn("ALTER TABLE", self.clean.upper())
+        # The only ALTER here is on this file's own table, to add a column to
+        # a table that was created before the column existed. The clinical
+        # tables of ENG-001 are not touched.
+        alters = re.findall(r"ALTER TABLE\s+(\w+)", self.clean, re.IGNORECASE)
+        for table in alters:
+            self.assertEqual(table, "prescription_document")
         self.assertNotIn("CREATE TABLE medication_request", self.clean)
 
     def test_the_prescription_table_it_references_exists(self):
