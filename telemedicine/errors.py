@@ -15,6 +15,14 @@ class ValidationError(TelemedicineError):
     """Input did not satisfy a documented rule (for example, a weak password)."""
 
 
+class NotFoundError(ValidationError):
+    """The thing does not exist.
+
+    Added by ENG-004 (the video consultation rooms): a room or an
+    appointment that is not there is a 404, not a malformed request.
+    """
+
+
 class ConflictError(ValidationError):
     """The request is valid but conflicts with the state of the data.
 

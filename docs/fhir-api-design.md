@@ -188,6 +188,7 @@ curl -H "Authorization: Bearer $TOKEN" \
   criterion of the README has a test of its own. This API's tests are the largest block of it.
 - **OPS-001** — the compliance review has to look at the gaps in §7, especially TLS, SMART, the
   missing lockout and the audit retention.
-- **ENG-004** — the video rooms are the last unread part of the visit loop, and the appointment
-  window that the booking service produces is what a room would admit the two parties against.
+- **ENG-004** — the video rooms have since been built (`docs/video-design.md`): the room, the
+  waiting room, the admission control and the join tokens, on their own `/video` surface beside
+  this one. What is still missing there is the media transport, which needs a provider.
 - A database, a real HTTP server, a session store and a deployment are all still ahead of this.

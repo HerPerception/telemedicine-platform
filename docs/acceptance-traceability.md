@@ -41,9 +41,11 @@ finding numbers in those rows — PRIV-02, SEC-05 and so on — are that review'
 | AC-BOOK-04 | Rescheduling frees the slot | covered | `tests/test_booking.py::BookingTestCase::test_rescheduling_moves_the_appointment_and_frees_the_old_slot`; `tests/test_booking.py::BookingTestCase::test_the_old_slot_can_be_booked_again_after_a_reschedule` | ENG-003 | |
 | AC-BOOK-05 | Both parties receive a confirmation | not covered | — | ENG-003 | The MVP has no mail or SMS transport, so nothing can be sent yet. The booking is recorded in the audit log; the notification is part of the transport work that OPS-002 depends on |
 | AC-BOOK-06 | A patient books only for themselves, and a clinician only in their own schedule | covered | `tests/test_booking.py::BookingTestCase::test_a_patient_cannot_book_for_somebody_else`; `tests/test_booking.py::BookingTestCase::test_a_practitioner_may_not_book_a_slot_of_another_practitioner`; `tests/test_booking.py::BookingTestCase::test_a_patient_may_not_cancel_another_patients_appointment` | ENG-003 | |
-| AC-VIDEO-01 | Only the booked patient and clinician can join the consultation | not covered | — | ENG-004 | Not implemented. ENG-004 needs an external media service, which the environment does not have |
-| AC-VIDEO-02 | The room is unavailable outside the appointment window | not covered | — | ENG-004 | Not implemented, for the same reason |
-| AC-VIDEO-03 | A join failure surfaces a clear error and a retry path | not covered | — | ENG-004 | Not implemented, for the same reason |
+| AC-VIDEO-01 | Only the booked patient and clinician can join the consultation | covered | `tests/test_video.py::JoiningTest::test_only_the_booked_patient_and_the_clinician_may_join`; `tests/test_video.py::JoiningTest::test_a_stranger_cannot_join`; `tests/test_video.py::JoiningTest::test_a_patient_cannot_admit_themselves`; `tests/test_video_api.py::VideoApiTest::test_a_stranger_cannot_join` | ENG-004 | |
+| AC-VIDEO-02 | The room is unavailable outside the appointment window | covered | `tests/test_video.py::WindowTest::test_joining_before_the_window_is_refused_with_a_retry_path`; `tests/test_video.py::WindowTest::test_joining_after_the_window_is_refused_and_is_not_retryable`; `tests/test_video_api.py::VideoApiTest::test_joining_before_the_window_is_a_conflict_with_a_retry_path`; `tests/test_video_api.py::VideoApiTest::test_joining_after_the_consultation_is_a_conflict_that_is_not_retryable` | ENG-004 | |
+| AC-VIDEO-03 | A join failure surfaces a clear error and a retry path | covered | `tests/test_video_api.py::VideoApiTest::test_joining_before_the_window_is_a_conflict_with_a_retry_path`; `tests/test_video_api.py::VideoApiTest::test_a_patient_who_is_not_admitted_gets_no_token`; `tests/test_video.py::WindowTest::test_the_room_state_says_when_it_is_closed` | ENG-004 | |
+| AC-VIDEO-04 | The waiting room and clinician admission control | covered | `tests/test_video.py::JoiningTest::test_the_patient_waits_for_the_clinician`; `tests/test_video.py::JoiningTest::test_the_clinician_admits_the_patient`; `tests/test_video.py::JoiningTest::test_the_clinician_sees_who_is_waiting`; `tests/test_video.py::JoiningTest::test_the_patient_does_not_see_who_is_waiting` | ENG-004 | |
+| AC-VIDEO-05 | The join credential is bound to one room, one participant and a short life | covered | `tests/test_video.py::JoinTokenTest::test_a_tampered_token_does_not_verify`; `tests/test_video.py::JoinTokenTest::test_a_token_signed_with_another_rooms_secret_does_not_verify`; `tests/test_video.py::JoinTokenTest::test_an_expired_token_does_not_verify` | ENG-004 | |
 | AC-RX-01 | Prescriptions are tied to the encounter and the patient | covered | `tests/test_prescriptions.py::IssuingTest::test_the_prescription_is_tied_to_the_encounter_and_the_patient`; `tests/test_prescriptions.py::IssuingTest::test_the_treating_clinician_can_issue`; `tests/test_schema.py::SchemaStructureTest::test_encounter_and_prescription_keep_their_parents_consistent` | ENG-005 | |
 | AC-RX-02 | Only the treating clinician can issue a prescription | covered | `tests/test_prescriptions.py::IssuingTest::test_a_patient_cannot_issue_a_prescription`; `tests/test_prescriptions.py::IssuingTest::test_a_clinician_who_did_not_treat_the_patient_cannot_issue`; `tests/test_authorization.py::RecordsServiceAccessTest::test_another_clinician_may_not_issue_for_an_encounter_they_did_not_have` | ENG-005 | |
 | AC-RX-03 | Every create and read of a prescription is audit-logged | covered | `tests/test_prescriptions.py::IssuingTest::test_issuing_is_audited`; `tests/test_prescriptions.py::IssuingTest::test_a_refused_issue_is_audited`; `tests/test_prescriptions.py::DownloadTest::test_downloading_is_audited_separately_from_reading`; `tests/test_prescriptions.py::DownloadTest::test_a_refused_download_is_audited` | ENG-005 | |
@@ -90,7 +92,7 @@ the conditions of a deployment, and the review of OPS-001 assessed them.
 
 | Owner | Criteria still open |
 | --- | --- |
-| ENG-004 | AC-VIDEO-01, AC-VIDEO-02, AC-VIDEO-03 |
+| ENG-004 | none of the criteria; the media transport itself is the remaining work, and it needs a provider |
 | ENG-003 | AC-BOOK-05 (the notification needs a transport) |
 | OPS-001 | AC-GATE-01, AC-GATE-03, AC-GATE-04, AC-GATE-05, AC-GATE-10, AC-GATE-11, and the partial ones |
 | ENG-007 | none of the criteria; the clinical repositories are the remaining work |
@@ -99,3 +101,8 @@ the conditions of a deployment, and the review of OPS-001 assessed them.
 The criteria are deliberately not all covered, and the ones that are not are named with the reason.
 That is the point of this document: a criterion that is quietly not tested is the thing that reaches
 a patient untested.
+
+The video criteria are covered by the rules of the room, not by a media stream: the MVP has no media
+provider, so what is tested is who may join, when the room is available, and what a client is told
+when it cannot get in. The transport that would carry the stream is the remaining work, and it is
+named in `docs/video-design.md` §6.

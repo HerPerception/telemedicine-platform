@@ -27,14 +27,16 @@ exists; check the repository before assuming anything.
 | `docs/prescription-design.md` | E-prescriptions: issuance, the document, the lifecycle and the gaps |
 | `docs/fhir-api-design.md` | The FHIR R4 API: endpoints, errors, authorization and the gaps |
 | `docs/acceptance-traceability.md` | Every acceptance criterion of the MVP, whether a test covers it, and which one |
+| `docs/video-design.md` | The video consultation rooms: the waiting room, admission control, join tokens and the missing transport |
 | `docs/reviews/compliance-review.md` | The OPS-001 privacy, security, accessibility and regulatory review, and the remediation list |
 | `db/schema.sql` | PostgreSQL DDL for the six clinical tables (ENG-001) |
 | `db/auth_schema.sql` | PostgreSQL DDL for accounts, sessions and the audit log (ENG-002) |
 | `db/prescription_schema.sql` | PostgreSQL DDL for the prescription document metadata (ENG-005) |
 | `telemedicine/` | The application layer: `auth`, `authorization`, `audit`, `records`, `booking`, `prescriptions`, `models`, `security`, `errors` |
 | `telemedicine/fhir/` | The FHIR R4 layer: `validation`, `serialization`, `repository`, `server` |
+| `telemedicine/video.py`, `telemedicine/video_api.py` | The video consultation rooms and their HTTP surface |
 | `scripts/validate_fhir_examples.py` | Command-line front end for `telemedicine.fhir.validation` |
-| `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots, booking, prescriptions, the FHIR API, the compliance remediations and the acceptance criteria |
+| `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots, booking, prescriptions, the FHIR API, the compliance remediations, the acceptance criteria and the video rooms |
 | `.github/workflows/ci.yml` | The continuous integration: the suite, the validator and the traceability check |
 | `multi-agent-orchestrator/` | Agent coordination bookkeeping — **not** product code. Do not edit it as part of a feature. |
 | `docs/persistence-design.md` | The database: the schema, the durable audit log, the shared lockout and the dependency |
@@ -59,7 +61,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (310 tests, 16 of them skipped without a database).
+Expected result of the test command: `OK` (359 tests, 16 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
@@ -83,6 +85,10 @@ its test. If you add a test, run the suite locally first: it is the same command
 
 An acceptance criterion is covered only if `docs/acceptance-traceability.md` names the test that
 covers it, and the name must be a real test. A criterion that cannot be covered yet says why.
+
+The video rooms hold health data in transit: the join token is signed per room, the room is bound
+to one appointment, and a join outside the appointment window is refused with a reason and a retry
+path rather than a guess.
 
 ## Conventions
 

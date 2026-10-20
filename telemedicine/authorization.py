@@ -29,6 +29,9 @@ class Action(str, enum.Enum):
     CREATE = "create"
     UPDATE = "update"
     DELETE = "delete"
+    # Added by ENG-004 (the video consultation rooms): taking part in a
+    # consultation is neither reading a record nor changing one.
+    JOIN = "join"
 
     def __str__(self) -> str:  # pragma: no cover - convenience only
         return self.value
@@ -153,6 +156,14 @@ RULES: Tuple[Rule, ...] = (
          "a practitioner may open slots in their own schedule"),
     Rule(Role.PRACTITIONER, ResourceType.SLOT, Action.UPDATE, OWN,
          "a practitioner may close or change slots in their own schedule"),
+
+    # --- ENG-004: the video consultation rooms ----------------------------
+    # Only the booked patient and the clinician who delivers the appointment
+    # may join the consultation.
+    Rule(Role.PATIENT, ResourceType.APPOINTMENT, Action.JOIN, OWN,
+         "a patient may join the consultation they booked"),
+    Rule(Role.PRACTITIONER, ResourceType.APPOINTMENT, Action.JOIN, TREATING,
+         "a clinician may join the consultation they deliver"),
 
     # --- ENG-006: the FHIR API write paths ------------------------------
     # A person may correct their own details; a clinician may correct the
