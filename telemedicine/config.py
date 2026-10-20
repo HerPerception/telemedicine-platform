@@ -16,6 +16,17 @@ environment of a machine they run on.
                               accident is a server that answers on a
                               network it was never meant to.
 ``TELEMEDICINE_PORT``          the port to listen on. Default ``8080``.
+``TELEMEDICINE_SMTP_HOST``      the mail server the delivery worker sends
+                              through.
+``TELEMEDICINE_SMTP_PORT``      its port. Default 25.
+``TELEMEDICINE_SMTP_FROM``      the address the messages come from.
+``TELEMEDICINE_SMTP_USERNAME``  the user to log in as, if the server wants
+                              one.
+``TELEMEDICINE_SMTP_PASSWORD``  its password. It is read from the
+                              environment and written nowhere.
+``TELEMEDICINE_SMTP_TLS``       whether to start TLS. Default true.
+``TELEMEDICINE_DELIVERY_INTERVAL``  how long the delivery worker waits
+                              between passes. Default 30 seconds.
 ``TELEMEDICINE_TRUST_FORWARDED_FOR``  whether to believe the address a
                               proxy says the request came from. Off by
                               default: the header is set by whoever sends
@@ -40,6 +51,13 @@ ENV_HOST = "TELEMEDICINE_HOST"
 ENV_PORT = "TELEMEDICINE_PORT"
 ENV_AUDIT_ANCHOR = "TELEMEDICINE_AUDIT_ANCHOR"
 ENV_TRUST_FORWARDED_FOR = "TELEMEDICINE_TRUST_FORWARDED_FOR"
+ENV_SMTP_HOST = "TELEMEDICINE_SMTP_HOST"
+ENV_SMTP_PORT = "TELEMEDICINE_SMTP_PORT"
+ENV_SMTP_FROM = "TELEMEDICINE_SMTP_FROM"
+ENV_SMTP_USERNAME = "TELEMEDICINE_SMTP_USERNAME"
+ENV_SMTP_PASSWORD = "TELEMEDICINE_SMTP_PASSWORD"
+ENV_SMTP_TLS = "TELEMEDICINE_SMTP_TLS"
+ENV_DELIVERY_INTERVAL = "TELEMEDICINE_DELIVERY_INTERVAL"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
@@ -54,6 +72,13 @@ class Settings:
     port: int = DEFAULT_PORT
     audit_anchor: Optional[str] = None
     trust_forwarded_for: bool = False
+    smtp_host: Optional[str] = None
+    smtp_port: int = 25
+    smtp_from: str = "telemedicine@localhost"
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_tls: bool = True
+    delivery_interval: int = 30
 
     @property
     def has_database(self) -> bool:
@@ -73,8 +98,26 @@ class Settings:
             raise ValueError(f"{ENV_PORT} must be a number, not '{port_text}'") from error
         anchor = (environment.get(ENV_AUDIT_ANCHOR) or "").strip() or None
         forwarded = (environment.get(ENV_TRUST_FORWARDED_FOR) or "").strip().lower()
+        tls = (environment.get(ENV_SMTP_TLS) or "").strip().lower()
+        smtp_host = (environment.get(ENV_SMTP_HOST) or "").strip() or None
+        smtp_from = (environment.get(ENV_SMTP_FROM) or "").strip() or "telemedicine@localhost"
+        smtp_username = (environment.get(ENV_SMTP_USERNAME) or "").strip() or None
+        smtp_password = (environment.get(ENV_SMTP_PASSWORD) or "").strip() or None
+        port_text = (environment.get(ENV_SMTP_PORT) or "").strip()
+        interval_text = (environment.get(ENV_DELIVERY_INTERVAL) or "").strip()
+        try:
+            smtp_port = int(port_text) if port_text else 25
+            delivery_interval = int(interval_text) if interval_text else 30
+        except ValueError as error:
+            raise ValueError(
+                f"the mail server port and the delivery interval must be numbers: {error}"
+            ) from error
         return cls(database_url=database_url, host=host, port=port, audit_anchor=anchor,
-                   trust_forwarded_for=forwarded in ("1", "true", "yes", "on"))
+                   trust_forwarded_for=forwarded in ("1", "true", "yes", "on"),
+                   smtp_host=smtp_host, smtp_port=smtp_port, smtp_from=smtp_from,
+                   smtp_username=smtp_username, smtp_password=smtp_password,
+                   smtp_tls=True if not tls else tls in ("1", "true", "yes", "on"),
+                   delivery_interval=delivery_interval)
 
     def describe(self) -> str:
         """A description of the settings, without the secret."""
