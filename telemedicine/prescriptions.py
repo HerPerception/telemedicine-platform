@@ -233,7 +233,8 @@ class PrescriptionService:
     # -- issuing ----------------------------------------------------------
 
     def issue(self, actor: UserAccount, encounter_id: str, *, medication_code: str,
-              medication_display: str, dosage_text: str) -> Tuple[Prescription, PrescriptionDocument]:
+              medication_display: str, dosage_text: str,
+              **details) -> Tuple[Prescription, PrescriptionDocument]:
         """Issue a prescription against an encounter and render its document.
 
         The authorization and the audit entry are the ones of ENG-002: only
@@ -246,6 +247,7 @@ class PrescriptionService:
             medication_display=medication_display,
             dosage_text=dosage_text,
             authored_on=self._clock(),
+            **details,
         )
         document = self._render_document(prescription)
         return prescription, document

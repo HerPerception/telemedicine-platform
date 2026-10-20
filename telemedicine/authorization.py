@@ -153,6 +153,17 @@ RULES: Tuple[Rule, ...] = (
          "a practitioner may open slots in their own schedule"),
     Rule(Role.PRACTITIONER, ResourceType.SLOT, Action.UPDATE, OWN,
          "a practitioner may close or change slots in their own schedule"),
+
+    # --- ENG-006: the FHIR API write paths ------------------------------
+    # A person may correct their own details; a clinician may correct the
+    # record of a consultation they delivered. A patient may not correct a
+    # clinical record, and no one may change another person's demographics.
+    Rule(Role.PATIENT, ResourceType.PATIENT, Action.UPDATE, OWN,
+         "a patient may update their own record"),
+    Rule(Role.PRACTITIONER, ResourceType.PRACTITIONER, Action.UPDATE, OWN,
+         "a practitioner may update their own record"),
+    Rule(Role.PRACTITIONER, ResourceType.ENCOUNTER, Action.UPDATE, TREATING,
+         "a practitioner may update an encounter they delivered"),
 )
 
 
