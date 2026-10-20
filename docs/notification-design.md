@@ -77,12 +77,15 @@ argument for having one.
 
 ## 6. Known gaps
 
-1. **No transport.** The application queues; something else must send. The MVP has no mail server,
-   so a booking still tells nobody in practice.
+1. **There is a transport now, and it has never talked to a real mail server.** The
+   `SmtpTransport` is tested against a mocked `smtplib`, not against a server, and a
+   deployment's mail server may want a different conversation — a submission agent, a
+   provider's API, a queue. The interface is the same.
 2. **No reminders.** A patient is told about a booking, and not reminded of it. Reminders are a
    policy question — how long before, how many — and are not in the MVP's scope.
-3. **The queue is not drained by anything.** There is no delivery process, no cron, no worker. The
-   `deliver()` method exists and is tested; something has to call it.
+3. **The worker is not running anywhere.** `scripts/run_delivery.py` is the entry point and it
+   works, but a deployment has to run it — once, and only once, because two workers would send
+   some messages twice.
 4. **The recipient's address is not in the message.** The message names the account, and the
    transport has to look the address up. That is deliberate: the address is personal data, and
    putting it in a notification row would put it in a second place.
@@ -94,9 +97,12 @@ argument for having one.
 
 ## 7. What the successor needs
 
-- **A transport** — a mail server, and a decision about which one and what it means for the
-  practice's data.
-- **Something that drains the queue**: a worker, a cron, or a request that does it.
-- **Reminders**, when the practice wants them.
+- **A mail server**, and a decision about which one and what it means for the practice's data: a
+  provider's mail service is a processor of health data, exactly as a media provider is.
+- **A deployment that runs the worker** — once, and only once.
+- **Reminders**, when the practice wants them: the same outbox, with a reminder scheduled at the
+  moment of the booking rather than sent at it.
+- **The messages that are not notifications**: a request for a new password, an invitation, a note
+  from the clinician to the patient between visits.
 - The rest of the notification types the practice will want: a request for a new password, an
   invitation, a message from the clinician to the patient between visits.
