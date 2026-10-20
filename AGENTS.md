@@ -23,11 +23,12 @@ exists; check the repository before assuming anything.
 | `docs/fhir-mappings.md` | Mapping of the model onto FHIR R4 (4.0.1) resources, with the verification method |
 | `docs/fhir/examples/` | One example of each modelled FHIR resource |
 | `docs/auth-design.md` | Authentication, authorization and audit design, and its limitations |
+| `docs/booking-design.md` | Booking, schedule management and the time-zone rules |
 | `db/schema.sql` | PostgreSQL DDL for the six clinical tables (ENG-001) |
 | `db/auth_schema.sql` | PostgreSQL DDL for accounts, sessions and the audit log (ENG-002) |
-| `telemedicine/` | The application layer: `auth`, `authorization`, `audit`, `records`, `models`, `security`, `errors` |
+| `telemedicine/` | The application layer: `auth`, `authorization`, `audit`, `records`, `booking`, `models`, `security`, `errors` |
 | `scripts/validate_fhir_examples.py` | Dependency-free validator for the example resources |
-| `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization and audit |
+| `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots and booking |
 | `multi-agent-orchestrator/` | Agent coordination bookkeeping — **not** product code. Do not edit it as part of a feature. |
 
 ## Verified commands
@@ -43,10 +44,10 @@ python3 scripts/validate_fhir_examples.py
 python3 -m unittest discover -s tests -v
 
 # Run one module
-python3 -m unittest tests.test_auth -v
+python3 -m unittest tests.test_booking -v
 ```
 
-Expected result of the test command: `OK` (129 tests as of the ENG-002 commit).
+Expected result of the test command: `OK` (183 tests as of the ENG-003 commit).
 
 ## Conventions
 
@@ -60,6 +61,9 @@ Expected result of the test command: `OK` (129 tests as of the ENG-002 commit).
 - Credentials and tokens are never logged, and the audit log records masked identifiers only.
 - Authorization is fail-closed: a request that matches no rule in `telemedicine/authorization.py` is
   denied, and every access to a record goes through `telemedicine/records.py` so that it is audited.
+- Times are stored as UTC instants. A local wall-clock time only becomes an instant through
+  `telemedicine.booking.resolve_local_time`, which refuses daylight-saving gaps and overlaps.
+- Booking changes to a schedule are recorded in the audit log under `slot.*` and `appointment.*`.
 
 ## Not yet established
 

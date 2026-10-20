@@ -8,6 +8,13 @@
   StructureDefinitions on 2026-10-19. See [`fhir-mappings.md`](fhir-mappings.md) for the per-element
   mapping and the verification method.
 
+> **Amendment — ENG-003, 2026-10-20.** The appointment/slot uniqueness rule was changed from a plain
+> unique constraint on `appointment.slot_id` to the partial unique index
+> `appointment_active_slot_key` (`slot_id WHERE status <> 'cancelled'`), so that cancelling an
+> appointment releases its slot instead of blocking it for ever. The schema file was amended before
+> it had ever been applied to a database, so no migration is needed. The amendment is recorded in
+> `multi-agent-orchestrator/resolution.md`.
+
 ## 1. Scope
 
 This document defines the six clinical entities of the MVP and the relationships between them.
@@ -198,8 +205,12 @@ Maps to `Appointment`. A booked visit.
   (`appointment_slot_match`).
 - `duration_minutes` must equal `(ends_at - starts_at) / 60`.
 - A cancelled appointment must carry a cancellation reason and a cancellation timestamp.
-- One slot can back at most one appointment, which together with the slot overlap constraint makes
-  double-booking impossible at the storage layer.
+- One slot can back at most one **active** appointment, which together with the slot overlap
+  constraint makes double-booking impossible at the storage layer. A *cancelled* appointment keeps
+  its reference to the slot it occupied — so the record of what was booked and released is not lost
+  — while the slot becomes bookable again. This is enforced by the partial unique index
+  `appointment_active_slot_key` over `slot_id WHERE status <> 'cancelled'` (amended by ENG-003; see
+  the note below).
 - The state machine (`booked → arrived → fulfilled`, `booked → cancelled`, `booked → noshow`) is
   enforced by the application layer in ENG-003; the column check only restricts the value set.
 

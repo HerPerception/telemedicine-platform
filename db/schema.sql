@@ -128,7 +128,11 @@ CREATE TABLE appointment (
     id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     patient_id          uuid        NOT NULL REFERENCES patient (id) ON DELETE RESTRICT,
     practitioner_id     uuid        NOT NULL REFERENCES practitioner (id) ON DELETE RESTRICT,
-    slot_id             uuid        NOT NULL UNIQUE,
+    -- Amended by ENG-003: the uniqueness of the slot is enforced by the
+    -- partial unique index below, so that a cancelled appointment keeps its
+    -- reference to the slot it occupied while the slot becomes bookable
+    -- again.
+    slot_id             uuid        NOT NULL,
     status              text        NOT NULL
                                     CHECK (status IN ('proposed', 'pending', 'booked', 'arrived',
                                                       'fulfilled', 'cancelled', 'noshow',
@@ -165,6 +169,15 @@ CREATE TABLE appointment (
 CREATE INDEX appointment_practitioner_start ON appointment (practitioner_id, starts_at);
 CREATE INDEX appointment_patient_start      ON appointment (patient_id, starts_at);
 CREATE INDEX appointment_status             ON appointment (status);
+
+-- At most one *active* appointment may occupy a slot. A cancelled
+-- appointment keeps its reference to the slot it occupied, so the record of
+-- what was booked and released is not lost, and the slot can be booked
+-- again. Without this, cancelling an appointment would leave the slot
+-- unusable for ever, because the old unique constraint would still see the
+-- cancelled appointment's row.
+CREATE UNIQUE INDEX appointment_active_slot_key
+    ON appointment (slot_id) WHERE status <> 'cancelled';
 
 -- ---------------------------------------------------------------------------
 -- encounter — the clinical encounter produced by a visit.
