@@ -34,7 +34,7 @@ CI_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 # document, which is what people read.
 EXPECTED_CRITERIA = (
     "AC-BOOK-01", "AC-BOOK-02", "AC-BOOK-03", "AC-BOOK-04", "AC-BOOK-05", "AC-BOOK-06",
-    "AC-VIDEO-01", "AC-VIDEO-02", "AC-VIDEO-03",
+    "AC-VIDEO-01", "AC-VIDEO-02", "AC-VIDEO-03", "AC-VIDEO-04", "AC-VIDEO-05",
     "AC-RX-01", "AC-RX-02", "AC-RX-03", "AC-RX-04", "AC-RX-05", "AC-RX-06",
     "AC-FHIR-01", "AC-FHIR-02", "AC-FHIR-03", "AC-FHIR-04", "AC-FHIR-05", "AC-FHIR-06",
     "AC-SEC-01", "AC-SEC-02", "AC-SEC-03", "AC-SEC-04", "AC-SEC-05", "AC-SEC-06",

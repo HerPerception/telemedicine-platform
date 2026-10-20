@@ -341,17 +341,51 @@ class _Handler(BaseHTTPRequestHandler):
         """Keep the console quiet; the audit log is the record of what happened."""
 
 
-def make_server(application: FhirApplication, host: str = "127.0.0.1",
+class ApplicationRouter:
+    """Sends a request to the application that owns its path.
+
+    The FHIR API is served under ``/fhir`` and the video rooms under
+    ``/video``; they are separate applications with different error shapes,
+    and one server can serve both.
+    """
+
+    def __init__(self, applications: Dict[str, object]):
+        self.applications = dict(applications)
+
+    def handle(self, method: str, path: str, query=None, headers=None, body=b"") -> Response:
+        for prefix, application in sorted(self.applications.items(),
+                                          key=lambda item: -len(item[0])):
+            if not prefix or path == prefix or path.startswith(prefix.rstrip("/") + "/"):
+                return application.handle(method, path, query, headers, body)
+        return Response(
+            status=404,
+            body=json.dumps({"error": "not_found",
+                             "message": f"no endpoint at '{path}'"}).encode("utf-8"),
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+
+
+def make_server(applications, host: str = "127.0.0.1",
                 port: int = 8080) -> ThreadingHTTPServer:
-    """Build a server for an application, ready to serve."""
-    handler = type("BoundHandler", (_Handler,), {"application": application})
+    """Build a server for one application, or for a set of them.
+
+    ``applications`` is either an application, or a mapping of path prefix to
+    application.
+    """
+    if isinstance(applications, dict):
+        router = ApplicationRouter(applications)
+    else:
+        router = ApplicationRouter({getattr(applications, "base_path", ""): applications})
+    handler = type("BoundHandler", (_Handler,), {"application": router})
     return ThreadingHTTPServer((host, port), handler)
 
 
-def serve(application: FhirApplication, host: str = "127.0.0.1", port: int = 8080) -> None:
+def serve(applications, host: str = "127.0.0.1", port: int = 8080) -> None:
     """Serve until interrupted."""
-    server = make_server(application, host, port)
-    print(f"FHIR R4 API listening on http://{host}:{port}{application.base_path}")
+    server = make_server(applications, host, port)
+    prefixes = ", ".join(sorted(getattr(applications, "base_path", "")
+                                if not isinstance(applications, dict) else applications))
+    print(f"listening on http://{host}:{port} ({prefixes})")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

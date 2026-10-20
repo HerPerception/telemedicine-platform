@@ -198,6 +198,15 @@ class RecordsService:
         """Every practitioner record. The caller filters it by scope."""
         return list(self._practitioners.values())
 
+    def get_appointment(self, appointment_id: str) -> Optional[Appointment]:
+        """Return an appointment without auditing the access.
+
+        For internal use, for example to find the window of a consultation
+        room. Reading an appointment *for a user* goes through
+        :meth:`read_appointment`, which authorizes and audits.
+        """
+        return self._appointments.get(appointment_id)
+
     def list_appointments(self) -> List[Appointment]:
         return list(self._appointments.values())
 
