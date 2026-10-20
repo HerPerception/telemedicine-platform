@@ -41,6 +41,8 @@ exists; check the repository before assuming anything.
 | `multi-agent-orchestrator/` | Agent coordination bookkeeping — **not** product code. Do not edit it as part of a feature. |
 | `docs/persistence-design.md` | The database: the schema, the durable audit log, the shared lockout and the dependency |
 | `docs/reviews/remediation-status.md` | Whether each finding of the compliance review is closed |
+| `docs/compliance/nigeria.md` | The answers for the jurisdiction: the law, the decisions, and what is still to be settled |
+| `docs/compliance/privacy-notice-draft.md` | The draft privacy notice, and the four optional-use consents |
 | `docs/notification-design.md` | The notification outbox: the confirmations, the transport and the retry |
 | `db/security_schema.sql` | PostgreSQL DDL for the shared lockout counter (ENG-007) |
 | `db/notification_schema.sql` | PostgreSQL DDL for the notification outbox (ENG-011) |
@@ -49,12 +51,28 @@ exists; check the repository before assuming anything.
 | `telemedicine/audit_anchor.py` | Publishing the head of the audit chain outside the database |
 | `telemedicine/session_api.py` | Signing in and out over HTTP, and the address the request came from |
 | `telemedicine/delivery.py` | The delivery worker, and the transport that talks to a mail server |
+| `telemedicine/consent.py` | The consent record: what a patient agreed to, and what they withdrew |
+| `db/consent_schema.sql` | PostgreSQL DDL for the consent record — append-only, like the audit log |
 | `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
 | `telemedicine/config.py`, `telemedicine/application.py` | The settings, and the application assembled from them |
 | `scripts/apply_schema.py` | Applies the database schema, and says what it skipped |
 | `scripts/run_server.py` | Runs the application: the FHIR API and the video rooms |
 | `scripts/verify_audit_chain.py` | Checks the audit chain, internally and against the anchors |
 | `scripts/run_delivery.py` | Sends the queued notifications |
+| `scripts/report_breach.py` | Assembles the section 40(2) breach report from the audit log |
+
+## The jurisdiction
+
+The practice is in **Nigeria**, and the applicable law is the **Nigeria Data Protection Act 2023**
+and the **National Health Act 2014**. Two consequences that are easy to get wrong:
+
+- the **clinical record does not rest on consent**. It is made under section 30(1)(g) — medical care,
+  under the responsibility of a professional owing a duty of confidentiality. Consent is for the
+  optional uses only, one purpose at a time, and each can be withdrawn on its own (section 35);
+- **personal data may not be transferred out of Nigeria** without an adequate basis (sections 41–43),
+  which is why the video media server is to be run by the practice, in Nigeria.
+
+`docs/compliance/nigeria.md` is the full answer, with the sources it rests on.
 
 ## Installing
 
@@ -84,7 +102,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (460 tests, 48 of them skipped without a database).
+Expected result of the test command: `OK` (a little over 500 tests, 48 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
