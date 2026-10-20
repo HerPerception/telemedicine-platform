@@ -29,10 +29,12 @@ from telemedicine.audit_anchor import AnchoredAuditLog, FileAuditAnchor
 from telemedicine.auth import AuthService
 from telemedicine.booking import BookingService, SlotService
 from telemedicine.config import Settings
+from telemedicine.consent import ConsentService, InMemoryConsentStore
 from telemedicine.fhir.repository import FhirRepository
 from telemedicine.fhir.server import ApplicationRouter, FhirApplication
 from telemedicine.persistence.audit_store import PostgresAuditLog
 from telemedicine.persistence.clinical_store import PostgresClinicalRepository
+from telemedicine.persistence.consent_store import PostgresConsentStore
 from telemedicine.persistence.database import Database
 from telemedicine.persistence.document_store import PostgresDocumentStore
 from telemedicine.persistence.lockout import InMemoryLockoutStore, PostgresLockoutStore
@@ -58,6 +60,7 @@ class Application:
     prescriptions: PrescriptionService
     notifications: NotificationService
     video: VideoService
+    consents: ConsentService
     fhir: FhirApplication
     video_api: VideoApplication
 
@@ -123,6 +126,7 @@ def build_application(settings: Optional[Settings] = None,
         clinical = PostgresClinicalRepository(database)
         slot_store = clinical
         notification_store = PostgresNotificationStore(database)
+        consent_store = PostgresConsentStore(database)
     else:
         audit = AuditLog(clock=clock) if clock is not None else AuditLog()
         lockout = InMemoryLockoutStore()
@@ -132,6 +136,7 @@ def build_application(settings: Optional[Settings] = None,
         clinical = None
         slot_store = None
         notification_store = None
+        consent_store = InMemoryConsentStore()
 
     if anchor_store is not None:
         # The chain is published outside the database, so that a chain
@@ -150,8 +155,15 @@ def build_application(settings: Optional[Settings] = None,
                                         notifications=notifications)
     video = VideoService(records, audit=audit)
 
+    # The consent record. It needs the records, because a clinician's access
+    # to a patient's consents comes from the treatment relationship that the
+    # records hold.
+    consents = ConsentService(store=consent_store, audit=audit, records=records,
+                              authorizer=records.authorizer)
+
     fhir = FhirApplication(FhirRepository(records, booking, prescriptions), auth,
-                            trust_forwarded_for=settings.trust_forwarded_for)
+                            trust_forwarded_for=settings.trust_forwarded_for,
+                            consent=consents)
     video_api = VideoApplication(video, auth,
                                  trust_forwarded_for=settings.trust_forwarded_for)
 
@@ -166,6 +178,7 @@ def build_application(settings: Optional[Settings] = None,
         prescriptions=prescriptions,
         notifications=notifications,
         video=video,
+        consents=consents,
         fhir=fhir,
         video_api=video_api,
     )

@@ -43,6 +43,7 @@ exists; check the repository before assuming anything.
 | `docs/persistence-design.md` | The database: the schema, the durable audit log, the shared lockout and the dependency |
 | `docs/reviews/remediation-status.md` | Whether each finding of the compliance review is closed |
 | `docs/compliance/nigeria.md` | The answers for the jurisdiction: the law, the decisions, and what is still to be settled |
+| `docs/consent-design.md` | The consent record and the endpoints that reach it |
 | `docs/compliance/privacy-notice-draft.md` | The draft privacy notice, and the four optional-use consents |
 | `docs/deployment.md` | The runbook: what a deployment is, what it needs, and how to bring it up |
 | `docs/notification-design.md` | The notification outbox: the confirmations, the transport and the retry |
@@ -54,6 +55,7 @@ exists; check the repository before assuming anything.
 | `telemedicine/session_api.py` | Signing in and out over HTTP, and the address the request came from |
 | `telemedicine/delivery.py` | The delivery worker, and the transport that talks to a mail server |
 | `telemedicine/consent.py` | The consent record: what a patient agreed to, and what they withdrew |
+| `telemedicine/consent_api.py` | The consent endpoints: a patient grants and withdraws, a clinician reads |
 | `db/consent_schema.sql` | PostgreSQL DDL for the consent record — append-only, like the audit log |
 | `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
 | `telemedicine/config.py`, `telemedicine/application.py` | The settings, and the application assembled from them |
