@@ -162,6 +162,13 @@ documents the lock to use.
 
 ## 9. Limitations and open items
 
+> The open findings of the OPS-001 review, and the conditions for handling real patient
+> data, are in [`reviews/compliance-review.md`](reviews/compliance-review.md). This section
+> lists the gaps the feature itself knows about; the review ranks them and says which of
+> them block a deployment.
+
+
+
 1. **No persistence.** The repositories are in memory; a restart loses accounts and sessions.
 2. **No database execution.** `db/auth_schema.sql` has not been run against PostgreSQL.
 3. **No lockout or rate limiting.** `failed_attempts` and `locked_until` exist in the schema but

@@ -26,13 +26,14 @@ exists; check the repository before assuming anything.
 | `docs/booking-design.md` | Booking, schedule management and the time-zone rules |
 | `docs/prescription-design.md` | E-prescriptions: issuance, the document, the lifecycle and the gaps |
 | `docs/fhir-api-design.md` | The FHIR R4 API: endpoints, errors, authorization and the gaps |
+| `docs/reviews/compliance-review.md` | The OPS-001 privacy, security, accessibility and regulatory review, and the remediation list |
 | `db/schema.sql` | PostgreSQL DDL for the six clinical tables (ENG-001) |
 | `db/auth_schema.sql` | PostgreSQL DDL for accounts, sessions and the audit log (ENG-002) |
 | `db/prescription_schema.sql` | PostgreSQL DDL for the prescription document metadata (ENG-005) |
 | `telemedicine/` | The application layer: `auth`, `authorization`, `audit`, `records`, `booking`, `prescriptions`, `models`, `security`, `errors` |
 | `telemedicine/fhir/` | The FHIR R4 layer: `validation`, `serialization`, `repository`, `server` |
 | `scripts/validate_fhir_examples.py` | Command-line front end for `telemedicine.fhir.validation` |
-| `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots, booking, prescriptions and the FHIR API |
+| `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots, booking, prescriptions, the FHIR API and the compliance remediations |
 | `multi-agent-orchestrator/` | Agent coordination bookkeeping — **not** product code. Do not edit it as part of a feature. |
 
 ## Verified commands
@@ -51,7 +52,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (269 tests as of the ENG-006 commit).
+Expected result of the test command: `OK` (279 tests as of the OPS-001 commit).
 
 One test reads a generated PDF with poppler's `pdftotext` and is skipped when that tool is not
 installed.
@@ -76,6 +77,8 @@ installed.
   and a resource that fails the check is never sent.
 - The API never reads or writes a record except through the domain services, so that every access is
   authorized and audited in one place.
+- `docs/reviews/compliance-review.md` holds the open findings and the conditions for using real
+  patient data. Nothing in this repository may handle a real patient until those conditions are met.
 
 ## Not yet established
 

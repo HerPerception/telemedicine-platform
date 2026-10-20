@@ -135,6 +135,15 @@ class SessionStore:
         self._by_token_hash[session.token_hash] = session
         return session
 
+    def revoke_for_user(self, user_id: str, now: datetime) -> int:
+        """End every session of a user. Returns how many were ended."""
+        revoked = 0
+        for token_hash, session in list(self._by_token_hash.items()):
+            if session.user_id == user_id and session.revoked_at is None:
+                self._by_token_hash[token_hash] = replace(session, revoked_at=now)
+                revoked += 1
+        return revoked
+
     def __len__(self) -> int:
         return len(self._by_token_hash)
 
@@ -154,6 +163,12 @@ class AuthService:
         self.password_iterations = password_iterations
         self.session_ttl = session_ttl
         self._clock = clock
+        # A hash of a value nobody knows, used to spend the same time on a
+        # login for an account that does not exist as on a login with a
+        # wrong password. Without it, the response time tells an attacker
+        # which addresses are registered.
+        self._decoy_hash = hash_password("not-a-real-password",
+                                         iterations=password_iterations)
 
     # -- accounts ---------------------------------------------------------
 
@@ -216,6 +231,10 @@ class AuthService:
             password_hash=hash_password(new_password, iterations=self.password_iterations),
         )
         self.users.save(updated)
+        # A password change ends every session of that account, including the
+        # one the change was made with: whoever asked for the change should
+        # have to sign in again.
+        revoked = self.sessions.revoke_for_user(account.user_id, self._clock())
         self.audit.append(
             actor_user_id=account.user_id,
             actor_role=account.role.value,
@@ -223,7 +242,7 @@ class AuthService:
             resource_type="user_account",
             resource_id=account.user_id,
             outcome=OUTCOME_SUCCESS,
-            detail="password changed",
+            detail=f"password changed; {revoked} session(s) revoked",
         )
         return updated
 
@@ -253,6 +272,9 @@ class AuthService:
 
         account = self.users.get_by_email(normalized)
         if account is None:
+            # Spend the same time as a real verification, so that the
+            # response does not reveal whether the account exists.
+            verify_password(password, self._decoy_hash)
             self._audit_login_failure(UNKNOWN_ACTOR, "unknown", normalized,
                                       "no such account")
             raise AuthenticationError("invalid credentials")
