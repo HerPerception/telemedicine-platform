@@ -1,0 +1,17 @@
+# The pieces of the repository that are not the application.
+.git
+.github
+.gitignore
+.mypy_cache
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+build
+dist
+docs
+multi-agent-orchestrator
+tests
+venv
+.venv

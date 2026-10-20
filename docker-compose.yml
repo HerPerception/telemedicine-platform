@@ -1,0 +1,77 @@
+# A staging environment: the application, the delivery worker and a database.
+#
+# It is a staging environment and not a production one. It has no TLS — put
+# a proxy in front of it, or use a tunnel — and the password below is a
+# placeholder that has to be changed before anything real is run.
+#
+#     cp .env.example .env      # then change the passwords
+#     docker compose up -d database
+#     docker compose run --rm api python3 scripts/apply_schema.py \
+#         "postgresql://telemedicine:${POSTGRES_PASSWORD}@database:5432/telemedicine"
+#     docker compose up -d api delivery
+#
+# The anchor file is on a volume, so the published audit chain survives a
+# restart. Copy it off the machine as well, or it is worth exactly what an
+# attacker with write access to the machine is worth.
+
+name: telemedicine
+
+services:
+  database:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: telemedicine
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: telemedicine
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telemedicine -d telemedicine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # The database is not published to the host: only the application talks to
+    # it, and only over the internal network.
+    expose:
+      - "5432"
+
+  api:
+    build: .
+    command: ["python3", "scripts/run_server.py"]
+    environment:
+      TELEMEDICINE_DATABASE_URL: postgresql://telemedicine:${POSTGRES_PASSWORD}@database:5432/telemedicine
+      TELEMEDICINE_HOST: 0.0.0.0
+      TELEMEDICINE_PORT: "8080"
+      TELEMEDICINE_AUDIT_ANCHOR: /var/lib/telemedicine/audit-anchors.jsonl
+      # Off in staging, because there is no proxy in front of it that
+      # replaces the header. A deployment behind a proxy sets this to true.
+      TELEMEDICINE_TRUST_FORWARDED_FOR: "false"
+    volumes:
+      - anchors:/var/lib/telemedicine
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  delivery:
+    build: .
+    command: ["python3", "scripts/run_delivery.py"]
+    environment:
+      TELEMEDICINE_DATABASE_URL: postgresql://telemedicine:${POSTGRES_PASSWORD}@database:5432/telemedicine
+      TELEMEDICINE_SMTP_HOST: ${TELEMEDICINE_SMTP_HOST:-}
+      TELEMEDICINE_SMTP_PORT: ${TELEMEDICINE_SMTP_PORT:-587}
+      TELEMEDICINE_SMTP_FROM: ${TELEMEDICINE_SMTP_FROM:-}
+      TELEMEDICINE_SMTP_USERNAME: ${TELEMEDICINE_SMTP_USERNAME:-}
+      TELEMEDICINE_SMTP_PASSWORD: ${TELEMEDICINE_SMTP_PASSWORD:-}
+      TELEMEDICINE_SMTP_TLS: ${TELEMEDICINE_SMTP_TLS:-true}
+      TELEMEDICINE_DELIVERY_INTERVAL: ${TELEMEDICINE_DELIVERY_INTERVAL:-30}
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  database:
+  anchors:
