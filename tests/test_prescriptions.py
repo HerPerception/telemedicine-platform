@@ -144,7 +144,7 @@ class IssuingTest(PrescriptionTestCase):
         self.assertEqual(prescription.prescriber_user_id, "user-practitioner")
         # The patient and the prescriber are inherited from the encounter, so
         # a prescription can never be attached to another patient.
-        encounter = self.records._encounters["encounter-1"]
+        encounter = self.records.get_encounter("encounter-1")
         self.assertEqual(prescription.patient_id, encounter.patient_id)
         self.assertEqual(prescription.prescriber_id, encounter.practitioner_id)
 

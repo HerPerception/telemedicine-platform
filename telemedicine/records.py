@@ -25,6 +25,7 @@ from telemedicine.audit import OUTCOME_DENIED, OUTCOME_SUCCESS, AuditLog
 from telemedicine.authorization import AccessScope, Action, Authorizer, ResourceType
 from telemedicine.errors import AuthorizationError, ValidationError
 from telemedicine.models import Role, UserAccount
+from telemedicine.repositories import ClinicalRepository, InMemoryClinicalRepository
 
 MEDICATION_CATALOG_SYSTEM = "https://telemedicine.example.org/CodeSystem/medication"
 
@@ -103,6 +104,11 @@ class Appointment:
     reason_text: Optional[str] = None
     patient_note: Optional[str] = None
     created_at: Optional[datetime] = None
+    # Added by ENG-009: the schema has always required a cancellation to
+    # carry a reason and a moment, and the database refuses a cancelled
+    # appointment without them. The domain had nowhere to put them.
+    cancellation_reason: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -151,14 +157,14 @@ class RecordsService:
     """Reads clinical records and issues prescriptions, with audit and scoping."""
 
     def __init__(self, authorizer: Optional[Authorizer] = None,
-                 audit: Optional[AuditLog] = None):
+                 audit: Optional[AuditLog] = None,
+                 repository: Optional[ClinicalRepository] = None):
         self.authorizer = authorizer if authorizer is not None else Authorizer()
         self.audit = audit if audit is not None else AuditLog()
-        self._patients: Dict[str, PatientRecord] = {}
-        self._practitioners: Dict[str, PractitionerRecord] = {}
-        self._appointments: Dict[str, Appointment] = {}
-        self._encounters: Dict[str, Encounter] = {}
-        self._prescriptions: Dict[str, Prescription] = {}
+        # Where the records live. The default is the memory of one process;
+        # a deployment passes the database one.
+        self.repository: ClinicalRepository = (
+            repository if repository is not None else InMemoryClinicalRepository())
 
     # -- registration of clinical data ------------------------------------
     # These mirror the write paths of the application. They exist so that the
@@ -166,37 +172,35 @@ class RecordsService:
     # boundaries themselves and must not be exposed over the API.
 
     def add_patient(self, patient: PatientRecord) -> PatientRecord:
-        self._patients[patient.patient_id] = patient
-        return patient
+        return self.repository.save_patient(patient)
 
     def add_practitioner(self, practitioner: PractitionerRecord) -> PractitionerRecord:
-        self._practitioners[practitioner.practitioner_id] = practitioner
-        return practitioner
+        return self.repository.save_practitioner(practitioner)
 
     def patients_treated_by(self, practitioner_user_id: str) -> List[PatientRecord]:
         """The patients a clinician treats, by their appointment or encounter."""
-        return [patient for patient in self._patients.values()
+        return [patient for patient in self.repository.list_patients()
                 if practitioner_user_id in self._treating_user_ids_for_patient(patient.patient_id)]
 
     def practitioners_treating(self, patient_user_id: str) -> List[PractitionerRecord]:
         """The clinicians who treat a patient, by their appointment or encounter."""
         user_ids = set()
-        for appointment in self._appointments.values():
+        for appointment in self.repository.list_appointments():
             if appointment.patient_user_id == patient_user_id:
                 user_ids.add(appointment.practitioner_user_id)
-        for encounter in self._encounters.values():
+        for encounter in self.repository.list_encounters():
             if encounter.patient_user_id == patient_user_id:
                 user_ids.add(encounter.practitioner_user_id)
-        return [practitioner for practitioner in self._practitioners.values()
+        return [practitioner for practitioner in self.repository.list_practitioners()
                 if practitioner.user_id in user_ids]
 
     def list_patients(self) -> List[PatientRecord]:
         """Every patient record. The caller filters it by scope."""
-        return list(self._patients.values())
+        return self.repository.list_patients()
 
     def list_practitioners(self) -> List[PractitionerRecord]:
         """Every practitioner record. The caller filters it by scope."""
-        return list(self._practitioners.values())
+        return self.repository.list_practitioners()
 
     def get_appointment(self, appointment_id: str) -> Optional[Appointment]:
         """Return an appointment without auditing the access.
@@ -205,30 +209,40 @@ class RecordsService:
         room. Reading an appointment *for a user* goes through
         :meth:`read_appointment`, which authorizes and audits.
         """
-        return self._appointments.get(appointment_id)
+        return self.repository.get_appointment(appointment_id)
 
     def list_appointments(self) -> List[Appointment]:
-        return list(self._appointments.values())
+        return self.repository.list_appointments()
 
     def list_encounters(self) -> List[Encounter]:
-        return list(self._encounters.values())
+        return self.repository.list_encounters()
+
+    def get_encounter(self, encounter_id: str) -> Optional[Encounter]:
+        """Return an encounter without auditing the access.
+
+        For internal use. Reading an encounter *for a user* goes through
+        :meth:`read_encounter`, which authorizes and audits.
+        """
+        return self.repository.get_encounter(encounter_id)
 
     def list_prescriptions(self) -> List[Prescription]:
-        return list(self._prescriptions.values())
+        return self.repository.list_prescriptions()
+
+    def appointment_for_slot(self, slot_id: str) -> Optional[Appointment]:
+        """The appointment that occupies a slot, if any."""
+        return self.repository.appointment_for_slot(slot_id)
 
     def patient_record(self, patient_id: str) -> Optional[PatientRecord]:
-        return self._patients.get(patient_id)
+        return self.repository.get_patient(patient_id)
 
     def practitioner_record(self, practitioner_id: str) -> Optional[PractitionerRecord]:
-        return self._practitioners.get(practitioner_id)
+        return self.repository.get_practitioner(practitioner_id)
 
     def add_appointment(self, appointment: Appointment) -> Appointment:
-        self._appointments[appointment.appointment_id] = appointment
-        return appointment
+        return self.repository.save_appointment(appointment)
 
     def add_encounter(self, encounter: Encounter) -> Encounter:
-        self._encounters[encounter.encounter_id] = encounter
-        return encounter
+        return self.repository.save_encounter(encounter)
 
     # -- lookups used to build the access scope ---------------------------
 
@@ -240,10 +254,10 @@ class RecordsService:
         to set.
         """
         treating = set()
-        for appointment in self._appointments.values():
+        for appointment in self.repository.list_appointments():
             if appointment.patient_id == patient_id:
                 treating.add(appointment.practitioner_user_id)
-        for encounter in self._encounters.values():
+        for encounter in self.repository.list_encounters():
             if encounter.patient_id == patient_id:
                 treating.add(encounter.practitioner_user_id)
         return frozenset(treating)
@@ -310,8 +324,7 @@ class RecordsService:
             audit_action=ACTION_RECORD_UPDATE, detail=f"update patient record {patient_id}",
         )
         updated = replace(patient, **changes)
-        self._patients[patient_id] = updated
-        return updated
+        return self.repository.save_patient(updated)
 
     def update_practitioner(self, actor: UserAccount, practitioner_id: str,
                             **changes) -> PractitionerRecord:
@@ -324,8 +337,7 @@ class RecordsService:
             detail=f"update practitioner record {practitioner_id}",
         )
         updated = replace(practitioner, **changes)
-        self._practitioners[practitioner_id] = updated
-        return updated
+        return self.repository.save_practitioner(updated)
 
     def create_encounter(self, actor: UserAccount, appointment_id: str, *,
                          started_at: Optional[datetime] = None,
@@ -338,11 +350,11 @@ class RecordsService:
         Only the clinician who delivers the appointment may record it, and
         the encounter inherits the appointment's patient and practitioner.
         """
-        appointment = self._appointments.get(appointment_id)
+        appointment = self.repository.get_appointment(appointment_id)
         if appointment is None:
             raise ValidationError(f"no appointment with id '{appointment_id}'")
         if any(encounter.appointment_id == appointment_id
-               for encounter in self._encounters.values()):
+               for encounter in self.repository.list_encounters()):
             raise ValidationError("an encounter already exists for this appointment")
         scope = self._appointment_scope(appointment)
         self._authorize_and_audit(
@@ -362,13 +374,12 @@ class RecordsService:
             chief_complaint=chief_complaint,
             clinical_note=clinical_note,
         )
-        self._encounters[encounter.encounter_id] = encounter
-        return encounter
+        return self.repository.save_encounter(encounter)
 
     def update_encounter(self, actor: UserAccount, encounter_id: str,
                          **changes) -> Encounter:
         """Change an encounter: its status, its note or its end time."""
-        encounter = self._encounters.get(encounter_id)
+        encounter = self.repository.get_encounter(encounter_id)
         if encounter is None:
             raise ValidationError(f"no encounter with id '{encounter_id}'")
         scope = self._encounter_scope(encounter)
@@ -377,17 +388,16 @@ class RecordsService:
             audit_action=ACTION_RECORD_UPDATE, detail=f"update encounter {encounter_id}",
         )
         updated = replace(encounter, **changes)
-        self._encounters[encounter_id] = updated
-        return updated
+        return self.repository.save_encounter(updated)
 
     def _require_practitioner(self, practitioner_id: str) -> PractitionerRecord:
-        practitioner = self._practitioners.get(practitioner_id)
+        practitioner = self.repository.get_practitioner(practitioner_id)
         if practitioner is None:
             raise ValidationError(f"no practitioner with id '{practitioner_id}'")
         return practitioner
 
     def read_appointment(self, actor: UserAccount, appointment_id: str) -> Appointment:
-        appointment = self._appointments.get(appointment_id)
+        appointment = self.repository.get_appointment(appointment_id)
         if appointment is None:
             raise ValidationError(f"no appointment with id '{appointment_id}'")
         scope = self._appointment_scope(appointment)
@@ -398,7 +408,7 @@ class RecordsService:
         return appointment
 
     def read_encounter(self, actor: UserAccount, encounter_id: str) -> Encounter:
-        encounter = self._encounters.get(encounter_id)
+        encounter = self.repository.get_encounter(encounter_id)
         if encounter is None:
             raise ValidationError(f"no encounter with id '{encounter_id}'")
         scope = self._encounter_scope(encounter)
@@ -424,7 +434,7 @@ class RecordsService:
         refused for, because no prescription exists to point at; both
         entries name the encounter in their detail.
         """
-        encounter = self._encounters.get(encounter_id)
+        encounter = self.repository.get_encounter(encounter_id)
         if encounter is None:
             raise ValidationError(f"no encounter with id '{encounter_id}'")
         if not medication_code or not medication_display or not dosage_text:
@@ -465,7 +475,7 @@ class RecordsService:
             authored_on=authored_on or datetime.now(timezone.utc),
             **details,
         )
-        self._prescriptions[prescription.prescription_id] = prescription
+        self.repository.save_prescription(prescription)
         self.audit.append(
             actor_user_id=actor.user_id,
             actor_role=actor.role.value,
@@ -479,7 +489,7 @@ class RecordsService:
 
     def read_prescription(self, actor: UserAccount, prescription_id: str) -> Prescription:
         """Read a prescription. The patient it is for, or the clinician who issued it."""
-        prescription = self._prescriptions.get(prescription_id)
+        prescription = self.repository.get_prescription(prescription_id)
         if prescription is None:
             raise ValidationError(f"no prescription with id '{prescription_id}'")
         scope = self._prescription_scope(prescription)
@@ -492,7 +502,7 @@ class RecordsService:
     def list_prescriptions_for_encounter(self, actor: UserAccount,
                                          encounter_id: str) -> List[Prescription]:
         """The prescriptions issued against an encounter, with one audit entry."""
-        encounter = self._encounters.get(encounter_id)
+        encounter = self.repository.get_encounter(encounter_id)
         if encounter is None:
             raise ValidationError(f"no encounter with id '{encounter_id}'")
         scope = self._encounter_scope(encounter)
@@ -501,8 +511,7 @@ class RecordsService:
             audit_action=ACTION_PRESCRIPTION_READ,
             detail=f"list prescriptions for encounter {encounter_id}",
         )
-        return [prescription for prescription in self._prescriptions.values()
-                if prescription.encounter_id == encounter_id]
+        return self.repository.prescriptions_for_encounter(encounter_id)
 
     def get_prescription(self, prescription_id: str) -> Prescription:
         """Return a prescription without auditing the access.
@@ -511,7 +520,7 @@ class RecordsService:
         transition. Reading a prescription *for a user* goes through
         :meth:`read_prescription`, which authorizes and audits.
         """
-        prescription = self._prescriptions.get(prescription_id)
+        prescription = self.repository.get_prescription(prescription_id)
         if prescription is None:
             raise ValidationError(f"no prescription with id '{prescription_id}'")
         return prescription
@@ -527,8 +536,7 @@ class RecordsService:
             detail=f"update prescription {prescription_id}",
         )
         updated = replace(prescription, **changes)
-        self._prescriptions[prescription_id] = updated
-        return updated
+        return self.repository.save_prescription(updated)
 
     def update_prescription_status(self, actor: UserAccount, prescription_id: str,
                                    status: str, *, reason: str = "") -> Prescription:
@@ -546,13 +554,12 @@ class RecordsService:
                    + (f": {reason}" if reason else ""),
         )
         updated = replace(prescription, status=status)
-        self._prescriptions[prescription_id] = updated
-        return updated
+        return self.repository.save_prescription(updated)
 
     # -- internals --------------------------------------------------------
 
     def _require_patient(self, patient_id: str) -> PatientRecord:
-        patient = self._patients.get(patient_id)
+        patient = self.repository.get_patient(patient_id)
         if patient is None:
             raise ValidationError(f"no patient with id '{patient_id}'")
         return patient

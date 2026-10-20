@@ -42,7 +42,8 @@ exists; check the repository before assuming anything.
 | `docs/persistence-design.md` | The database: the schema, the durable audit log, the shared lockout and the dependency |
 | `docs/reviews/remediation-status.md` | Whether each finding of the compliance review is closed |
 | `db/security_schema.sql` | PostgreSQL DDL for the shared lockout counter (ENG-007) |
-| `telemedicine/persistence/` | The database, the durable audit log, the shared lockout, the accounts, the sessions and the prescription documents |
+| `telemedicine/persistence/` | The database, the durable audit log, the shared lockout, the accounts, the sessions, the prescription documents and the clinical records |
+| `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
 | `scripts/apply_schema.py` | Applies the database schema, and says what it skipped |
 
 ## Verified commands
@@ -61,7 +62,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (375 tests, 30 of them skipped without a database).
+Expected result of the test command: `OK` (385 tests, 40 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
@@ -115,6 +116,8 @@ path rather than a guess.
   and a resource that fails the check is never sent.
 - The API never reads or writes a record except through the domain services, so that every access is
   authorized and audited in one place.
+- The services hold no records: they ask a repository, and the repository is either the memory of
+  one process or the database. A deployment passes the database one.
 - `docs/reviews/compliance-review.md` holds the open findings and the conditions for using real
   patient data. Nothing in this repository may handle a real patient until those conditions are met.
 
