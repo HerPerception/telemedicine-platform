@@ -26,13 +26,15 @@ exists; check the repository before assuming anything.
 | `docs/booking-design.md` | Booking, schedule management and the time-zone rules |
 | `docs/prescription-design.md` | E-prescriptions: issuance, the document, the lifecycle and the gaps |
 | `docs/fhir-api-design.md` | The FHIR R4 API: endpoints, errors, authorization and the gaps |
+| `docs/acceptance-traceability.md` | Every acceptance criterion of the MVP, whether a test covers it, and which one |
 | `db/schema.sql` | PostgreSQL DDL for the six clinical tables (ENG-001) |
 | `db/auth_schema.sql` | PostgreSQL DDL for accounts, sessions and the audit log (ENG-002) |
 | `db/prescription_schema.sql` | PostgreSQL DDL for the prescription document metadata (ENG-005) |
 | `telemedicine/` | The application layer: `auth`, `authorization`, `audit`, `records`, `booking`, `prescriptions`, `models`, `security`, `errors` |
 | `telemedicine/fhir/` | The FHIR R4 layer: `validation`, `serialization`, `repository`, `server` |
 | `scripts/validate_fhir_examples.py` | Command-line front end for `telemedicine.fhir.validation` |
-| `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots, booking, prescriptions and the FHIR API |
+| `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots, booking, prescriptions, the FHIR API and the acceptance criteria |
+| `.github/workflows/ci.yml` | The continuous integration: the suite, the validator and the traceability check |
 | `multi-agent-orchestrator/` | Agent coordination bookkeeping — **not** product code. Do not edit it as part of a feature. |
 
 ## Verified commands
@@ -51,10 +53,17 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (269 tests as of the ENG-006 commit).
+Expected result of the test command: `OK` (284 tests as of the QA-001 commit).
 
 One test reads a generated PDF with poppler's `pdftotext` and is skipped when that tool is not
 installed.
+
+The same commands run in CI (`.github/workflows/ci.yml`) on every push to `main` and on every pull
+request, together with the traceability check that fails the build if an acceptance criterion loses
+its test. If you add a test, run the suite locally first: it is the same command.
+
+An acceptance criterion is covered only if `docs/acceptance-traceability.md` names the test that
+covers it, and the name must be a real test. A criterion that cannot be covered yet says why.
 
 ## Conventions
 
