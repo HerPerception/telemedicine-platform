@@ -38,9 +38,11 @@ exists; check the repository before assuming anything.
 | `scripts/validate_fhir_examples.py` | Command-line front end for `telemedicine.fhir.validation` |
 | `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots, booking, prescriptions, the FHIR API, the compliance remediations, the acceptance criteria and the video rooms |
 | `.github/workflows/ci.yml` | The continuous integration: the suite, the validator and the traceability check |
+| `Dockerfile`, `docker-compose.yml` | The container, and a staging environment: the API, the delivery worker and a database |
 | `multi-agent-orchestrator/` | Agent coordination bookkeeping — **not** product code. Do not edit it as part of a feature. |
 | `docs/persistence-design.md` | The database: the schema, the durable audit log, the shared lockout and the dependency |
 | `docs/reviews/remediation-status.md` | Whether each finding of the compliance review is closed |
+| `docs/deployment.md` | The runbook: what a deployment is, what it needs, and how to bring it up |
 | `docs/notification-design.md` | The notification outbox: the confirmations, the transport and the retry |
 | `db/security_schema.sql` | PostgreSQL DDL for the shared lockout counter (ENG-007) |
 | `db/notification_schema.sql` | PostgreSQL DDL for the notification outbox (ENG-011) |
@@ -55,6 +57,7 @@ exists; check the repository before assuming anything.
 | `scripts/run_server.py` | Runs the application: the FHIR API and the video rooms |
 | `scripts/verify_audit_chain.py` | Checks the audit chain, internally and against the anchors |
 | `scripts/run_delivery.py` | Sends the queued notifications |
+| `scripts/healthcheck.py` | Whether the application is ready to serve |
 
 ## Installing
 
@@ -84,7 +87,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (460 tests, 48 of them skipped without a database).
+Expected result of the test command: `OK` (479 tests, 48 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
@@ -158,6 +161,9 @@ path rather than a guess.
   the same path. The lockout counts the address the request came from as well as the account.
 - The notifications are queued in the database and sent by `scripts/run_delivery.py`, which talks to a
   mail server with the standard library's `smtplib`. Delivery is at least once.
+- A deployment is described in `docs/deployment.md`, and the container and the compose file are in
+  the repository. The schema is applied as a deployment step, never by the application when it
+  starts.
 - `docs/reviews/compliance-review.md` holds the open findings and the conditions for using real
   patient data. Nothing in this repository may handle a real patient until those conditions are met.
 
