@@ -224,10 +224,12 @@ class PrescriptionService:
     """Issues, views, downloads and changes prescriptions."""
 
     def __init__(self, records: RecordsService, documents: Optional[DocumentStore] = None,
-                 audit: Optional[AuditLog] = None, clock=_utc_now):
+                 audit: Optional[AuditLog] = None, notifications=None, clock=_utc_now):
         self.records = records
         self.documents = documents if documents is not None else DocumentStore()
         self.audit = audit if audit is not None else records.audit
+        # Optional: where the "your prescription is ready" message is queued.
+        self.notifications = notifications
         self._clock = clock
 
     # -- issuing ----------------------------------------------------------
@@ -269,8 +271,9 @@ class PrescriptionService:
             created_at=self._clock(),
         )
         self.documents.put(document)
+        self._notify_prescription(prescription)
         self.audit.append(
-            actor_user_id="system",
+            actor_user_id=None,
             actor_role="system",
             action=ACTION_DOCUMENT_RENDER,
             resource_type=ResourceType.MEDICATION_REQUEST.value,
@@ -281,6 +284,24 @@ class PrescriptionService:
         return document
 
     # -- viewing and downloading ------------------------------------------
+
+    def _notify_prescription(self, prescription: Prescription) -> None:
+        """Tell the patient that their prescription is ready.
+
+        The message is queued rather than sent, for the same reason the
+        booking's is: the delivery is somebody else's job.
+        """
+        if self.notifications is None:
+            return
+        from telemedicine.notifications import (
+            AUDIENCE_PATIENT,
+            KIND_PRESCRIPTION_ISSUED,
+            prescription_message,
+        )
+        subject, body = prescription_message(prescription, AUDIENCE_PATIENT)
+        self.notifications.queue(kind=KIND_PRESCRIPTION_ISSUED,
+                                 recipient_user_id=prescription.patient_user_id,
+                                 subject=subject, body=body)
 
     def read(self, actor: UserAccount, prescription_id: str) -> Prescription:
         """Read a prescription. Authorized and audited by ENG-002's service."""

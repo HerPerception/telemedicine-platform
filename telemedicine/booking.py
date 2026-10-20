@@ -50,6 +50,11 @@ from telemedicine.authorization import (
 )
 from telemedicine.errors import AuthorizationError, ConflictError, ValidationError
 from telemedicine.models import Role, UserAccount
+from telemedicine.notifications import (
+    KIND_APPOINTMENT_BOOKED,
+    KIND_APPOINTMENT_CANCELLED,
+    KIND_APPOINTMENT_RESCHEDULED,
+)
 from telemedicine.records import Appointment, RecordsService
 from telemedicine.repositories import InMemorySlotRepository, SlotRepository
 
@@ -319,7 +324,7 @@ class BookingService:
 
     def __init__(self, slots: SlotService, authorizer: Optional[Authorizer] = None,
                  audit: Optional[AuditLog] = None, accounts=None, records=None,
-                 clock=_utc_now):
+                 notifications=None, clock=_utc_now):
         self.slots = slots
         self.authorizer = authorizer if authorizer is not None else Authorizer()
         self.audit = audit if audit is not None else AuditLog(clock=clock)
@@ -332,6 +337,10 @@ class BookingService:
         # appointment mapping is a question about the data, and the data
         # answers it.
         self.records = records if records is not None else RecordsService(audit=self.audit)
+        # Optional: where the confirmations are queued. Without it the booking
+        # happens and nobody is told, which is what the MVP did until
+        # ENG-011.
+        self.notifications = notifications
         self._clock = clock
         self._lock = threading.Lock()
 
@@ -383,6 +392,7 @@ class BookingService:
         self.slots._set_status(slot.slot_id, SLOT_BUSY)
         if self.records is not None:
             self.records.add_appointment(appointment)
+        self._notify_appointment(KIND_APPOINTMENT_BOOKED, appointment)
         self.audit.append(
             actor_user_id=actor.user_id,
             actor_role=actor.role.value,
@@ -445,8 +455,7 @@ class BookingService:
         if old_slot_id is not None and old_slot_id != new_slot.slot_id:
             self.slots._set_status(old_slot_id, SLOT_FREE)
         self.slots._set_status(new_slot.slot_id, SLOT_BUSY)
-        if self.records is not None:
-            self.records.add_appointment(moved)
+        self._notify_appointment(KIND_APPOINTMENT_RESCHEDULED, moved)
         self.audit.append(
             actor_user_id=actor.user_id,
             actor_role=actor.role.value,
@@ -485,8 +494,7 @@ class BookingService:
 
         if appointment.slot_id is not None:
             self.slots._set_status(appointment.slot_id, SLOT_FREE)
-        if self.records is not None:
-            self.records.add_appointment(cancelled)
+        self._notify_appointment(KIND_APPOINTMENT_CANCELLED, cancelled)
         self.audit.append(
             actor_user_id=actor.user_id,
             actor_role=actor.role.value,
@@ -550,6 +558,28 @@ class BookingService:
         if not account.record_id:
             raise ValidationError("the patient account is not linked to a patient record")
         return account, account.record_id
+
+    def _notify_appointment(self, kind: str, appointment: Appointment) -> None:
+        """Tell both parties that the appointment changed.
+
+        The message is queued, not sent: the delivery is somebody else's job,
+        and a crash between the booking and the sending must not lose the
+        confirmation.
+        """
+        if self.notifications is None:
+            return
+        from telemedicine.notifications import (
+            AUDIENCE_CLINICIAN,
+            AUDIENCE_PATIENT,
+            appointment_message,
+        )
+        for recipient, audience in ((appointment.patient_user_id, AUDIENCE_PATIENT),
+                                    (appointment.practitioner_user_id, AUDIENCE_CLINICIAN)):
+            if not recipient:
+                continue
+            subject, body = appointment_message(kind, appointment, audience)
+            self.notifications.queue(kind=kind, recipient_user_id=recipient,
+                                     subject=subject, body=body)
 
     def _require(self, actor: UserAccount, action: Action, resource_type: ResourceType,
                  scope: AccessScope, resource_id: str, what: str, audit_action: str,
