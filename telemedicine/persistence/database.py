@@ -27,6 +27,13 @@ from typing import Dict, Iterator, List, Optional, Sequence
 
 # The order matters: the auth schema refers to nothing, the prescription
 # schema refers to the clinical tables.
+# The tables the schema creates. A deployment checks them before it serves.
+EXPECTED_TABLES = (
+    "patient", "practitioner", "schedule_slot", "appointment", "encounter",
+    "medication_request", "user_account", "auth_session", "audit_log",
+    "prescription_document", "auth_lockout",
+)
+
 SCHEMA_FILES = (
     "schema.sql",
     "auth_schema.sql",
@@ -45,6 +52,29 @@ DOLLAR_TAG_RE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 
 class SchemaError(RuntimeError):
     """The schema could not be applied."""
+
+
+class DriverMissing(RuntimeError):
+    """The PostgreSQL driver is not installed.
+
+    The project has one dependency, and this is what happens when it is
+    missing. The message says how to install it, because the alternative is
+    a raw ``No module named 'psycopg'`` at the point of use.
+    """
+
+
+DRIVER_INSTALL = "pip install 'psycopg[binary]'"
+
+
+def import_driver():
+    """Import psycopg, or say what to do about it."""
+    try:
+        import psycopg
+    except ImportError as error:
+        raise DriverMissing(
+            "the PostgreSQL driver is not installed. Install the project's "
+            f"dependencies with: {DRIVER_INSTALL}") from error
+    return psycopg
 
 
 @dataclass
@@ -73,10 +103,32 @@ class Database:
     # -- connecting --------------------------------------------------------
 
     def connect(self, autocommit: bool = False):
-        """Open a connection. psycopg is imported here, so that the module
-        can be imported without the driver installed."""
-        import psycopg
+        """Open a connection.
+
+        psycopg is imported here, so that the module can be imported
+        without the driver installed — and so that a missing driver is a
+        sentence rather than an ``ImportError`` from three frames down.
+        """
+        psycopg = import_driver()
         return psycopg.connect(self.dsn, autocommit=autocommit)
+
+    def check_connection(self) -> None:
+        """Check that the database is there, and say so plainly if it is not."""
+        try:
+            with self.connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+        except DriverMissing:
+            raise
+        except Exception as error:
+            raise SchemaError(
+                f"the database could not be reached: {error}") from error
+
+    def missing_tables(self, expected=EXPECTED_TABLES) -> List[str]:
+        """The tables of the schema that are not there."""
+        present = set(self.tables())
+        return [table for table in expected if table not in present]
 
     @contextmanager
     def connection(self, autocommit: bool = False):

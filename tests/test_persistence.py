@@ -58,7 +58,12 @@ def _fresh_database(name):
             connection.execute(f'CREATE DATABASE "{name}"')
     except Exception as error:  # pragma: no cover - depends on the environment
         raise unittest.SkipTest(f"the database is not reachable: {error}") from error
-    return Database(make_conninfo(**{**info, "dbname": name}))
+    database = Database(make_conninfo(**{**info, "dbname": name}))
+    # The schema is applied here, so that every caller gets a database the
+    # application can actually run against. A test that forgets it finds out
+    # as a failure to start, which is the right place to find out.
+    database.apply_schema()
+    return database
 
 
 class DatabaseTestCase(unittest.TestCase):

@@ -39,9 +39,6 @@ def main(argv=None) -> int:
 
     try:
         report = Database(args.dsn).apply_schema(args.directory)
-    except SchemaError as error:
-        print(f"the schema was not applied: {error}", file=sys.stderr)
-        return 1
     except Exception as error:
         print(f"the schema was not applied: {error}", file=sys.stderr)
         return 1

@@ -44,12 +44,26 @@ exists; check the repository before assuming anything.
 | `db/security_schema.sql` | PostgreSQL DDL for the shared lockout counter (ENG-007) |
 | `telemedicine/persistence/` | The database, the durable audit log, the shared lockout, the accounts, the sessions, the prescription documents and the clinical records |
 | `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
+| `telemedicine/config.py`, `telemedicine/application.py` | The settings, and the application assembled from them |
 | `scripts/apply_schema.py` | Applies the database schema, and says what it skipped |
+| `scripts/run_server.py` | Runs the application: the FHIR API and the video rooms |
+
+## Installing
+
+The application code uses only the Python 3 standard library, and the project has **one**
+dependency: the PostgreSQL driver. It is only needed to run against a database; the tests that do
+not need one run without it.
+
+```bash
+pip install -e .            # or: pip install 'psycopg[binary]'
+```
+
+A deployment needs the driver, and the application says so if it is missing.
 
 ## Verified commands
 
-Run from the repository root. Everything uses only the Python 3 standard library; there is nothing to
-install.
+Run from the repository root. The suite runs without anything installed — the persistence tests are
+skipped when there is no database — and with the driver and a server, every test runs.
 
 ```bash
 # Validate the example FHIR resources against the declared mapping
@@ -62,7 +76,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (385 tests, 40 of them skipped without a database).
+Expected result of the test command: `OK` (398 tests, 45 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
@@ -76,6 +90,15 @@ The schema is applied with:
 ```bash
 python3 scripts/apply_schema.py "postgresql://user@host/database"
 ```
+
+The application is run with:
+
+```bash
+TELEMEDICINE_DATABASE_URL="postgresql://user@host/database" python3 scripts/run_server.py
+```
+
+Without `TELEMEDICINE_DATABASE_URL` the records stay in the memory of the
+process, and the server says so.
 
 One test reads a generated PDF with poppler's `pdftotext` and is skipped when that tool is not
 installed.
