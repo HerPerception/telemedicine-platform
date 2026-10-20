@@ -37,7 +37,8 @@ def parse_tables(sql):
     """Return {table_name: [body lines]} for every CREATE TABLE statement."""
     sql = strip_comments(sql)
     tables = {}
-    pattern = re.compile(r"CREATE TABLE\s+(\w+)\s*\((.*?)\n\);", re.DOTALL | re.IGNORECASE)
+    pattern = re.compile(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)\s*\((.*?)\n\);",
+                     re.DOTALL | re.IGNORECASE)
     for match in pattern.finditer(sql):
         name = match.group(1)
         body = [line.strip() for line in match.group(2).splitlines() if line.strip()]

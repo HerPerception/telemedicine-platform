@@ -26,7 +26,7 @@
 -- ---------------------------------------------------------------------------
 -- user_account
 -- ---------------------------------------------------------------------------
-CREATE TABLE user_account (
+CREATE TABLE IF NOT EXISTS user_account (
     id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     -- Stored lower-cased by the application; the unique index below is on
     -- lower(email) so that case can never create a second account.
@@ -50,15 +50,15 @@ CREATE TABLE user_account (
     CONSTRAINT user_account_hash_is_encoded CHECK (password_hash LIKE 'pbkdf2_sha256$%')
 );
 
-CREATE UNIQUE INDEX user_account_email_lower_key ON user_account (lower(email));
-CREATE INDEX user_account_account_ref ON user_account (account_ref);
+CREATE UNIQUE INDEX IF NOT EXISTS user_account_email_lower_key ON user_account (lower(email));
+CREATE INDEX IF NOT EXISTS user_account_account_ref ON user_account (account_ref);
 
 -- ---------------------------------------------------------------------------
 -- auth_session
 -- ---------------------------------------------------------------------------
 -- A session token is shown to the client exactly once. Only its SHA-256
 -- digest is stored, so a leaked table cannot be used to impersonate a user.
-CREATE TABLE auth_session (
+CREATE TABLE IF NOT EXISTS auth_session (
     id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         uuid        NOT NULL REFERENCES user_account (id) ON DELETE CASCADE,
     token_hash      char(64)    NOT NULL UNIQUE,
@@ -72,8 +72,8 @@ CREATE TABLE auth_session (
     CONSTRAINT auth_session_revocation_has_time CHECK (revoked_at IS NULL OR revoked_at >= created_at)
 );
 
-CREATE INDEX auth_session_user_active ON auth_session (user_id) WHERE revoked_at IS NULL;
-CREATE INDEX auth_session_expiry ON auth_session (expires_at) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS auth_session_user_active ON auth_session (user_id) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS auth_session_expiry ON auth_session (expires_at) WHERE revoked_at IS NULL;
 
 -- ---------------------------------------------------------------------------
 -- audit_log
@@ -87,11 +87,12 @@ CREATE INDEX auth_session_expiry ON auth_session (expires_at) WHERE revoked_at I
 -- The application writes entries with the previous entry's hash as
 -- `previous_hash`; it reads the chain head inside a transaction that takes
 -- an advisory lock, so two concurrent writers cannot fork the chain.
-CREATE TABLE audit_log (
+CREATE TABLE IF NOT EXISTS audit_log (
     sequence       bigserial   PRIMARY KEY,
     occurred_at    timestamptz NOT NULL DEFAULT now(),
     -- Nullable: a failed login for an account that does not exist has no
-    -- actor. The application writes 'anonymous' in that case.
+    -- actor, so the column is null in that case. The application writes no
+    -- id rather than a placeholder, because the column is a uuid.
     actor_user_id  uuid,
     actor_role     text,
     action         text        NOT NULL,
@@ -105,10 +106,10 @@ CREATE TABLE audit_log (
     CONSTRAINT audit_log_entry_hash_shape CHECK (entry_hash ~ '^[0-9a-f]{64}$')
 );
 
-CREATE INDEX audit_log_resource ON audit_log (resource_type, resource_id, sequence);
-CREATE INDEX audit_log_actor ON audit_log (actor_user_id, sequence);
-CREATE INDEX audit_log_occurred ON audit_log (occurred_at);
-CREATE INDEX audit_log_denied ON audit_log (outcome, occurred_at) WHERE outcome = 'denied';
+CREATE INDEX IF NOT EXISTS audit_log_resource ON audit_log (resource_type, resource_id, sequence);
+CREATE INDEX IF NOT EXISTS audit_log_actor ON audit_log (actor_user_id, sequence);
+CREATE INDEX IF NOT EXISTS audit_log_occurred ON audit_log (occurred_at);
+CREATE INDEX IF NOT EXISTS audit_log_denied ON audit_log (outcome, occurred_at) WHERE outcome = 'denied';
 
 -- The log is append-only. A row that has been written cannot be changed or
 -- removed, not even by a privileged session, and the application has no
@@ -121,10 +122,12 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS audit_log_no_update_or_delete ON audit_log;
 CREATE TRIGGER audit_log_no_update_or_delete
     BEFORE UPDATE OR DELETE ON audit_log
     FOR EACH ROW EXECUTE FUNCTION audit_log_is_append_only();
 
+DROP TRIGGER IF EXISTS audit_log_no_truncate ON audit_log;
 CREATE TRIGGER audit_log_no_truncate
     BEFORE TRUNCATE ON audit_log
     FOR EACH STATEMENT EXECUTE FUNCTION audit_log_is_append_only();

@@ -28,7 +28,8 @@ def strip_comments(sql):
 def parse_tables(sql):
     sql = strip_comments(sql)
     tables = {}
-    pattern = re.compile(r"CREATE TABLE\s+(\w+)\s*\((.*?)\n\);", re.DOTALL | re.IGNORECASE)
+    pattern = re.compile(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)\s*\((.*?)\n\);",
+                     re.DOTALL | re.IGNORECASE)
     for match in pattern.finditer(sql):
         body = [line.strip() for line in match.group(2).splitlines() if line.strip()]
         tables[match.group(1)] = body
