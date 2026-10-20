@@ -55,6 +55,7 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | SEC-15 The server is a development server | Low | open | A real server behind a proxy |
 | SEC-16 Any client with a token can call the API | Low | open | A policy to state rather than to implement |
 | *(new)* The accounts, the sessions and the prescription documents were held in memory, so they were neither shared between instances nor durable | — | **closed** | `telemedicine/persistence/account_store.py` and `document_store.py`: the `user_account`, `auth_session` and `prescription_document` tables. A session issued on one instance is accepted by another, which is what decides where a request may be load-balanced to |
+| *(new)* The clinical records were held in memory, so nothing was durable and two instances saw different patients | — | **closed** | `telemedicine/persistence/clinical_store.py` and `telemedicine/repositories.py`: the services ask a repository for the records instead of holding them. The database's partial unique index is now the guarantee against double-booking across instances, and the store turns its refusal into the same conflict the service raises |
 
 ## Accessibility
 

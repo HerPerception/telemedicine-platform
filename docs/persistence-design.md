@@ -38,6 +38,10 @@ refusing the table.
   `user_account` and `auth_session` tables.
 - **`telemedicine/persistence/document_store.py`** — the prescription documents, in the
   `prescription_document` table.
+- **`telemedicine/persistence/clinical_store.py`** — the clinical records of ENG-001 in their
+  tables.
+- **`telemedicine/repositories.py`** — where the records go, and the implementation that keeps them
+  in memory.
 - **`db/security_schema.sql`** — the `auth_lockout` table.
 - **`pyproject.toml`** — the dependency manifest. The project now has **one** third-party
   dependency, the PostgreSQL driver.
@@ -180,6 +184,36 @@ to a pharmacy must not be able to disappear. The document's bytes live in a `byt
 deployment would put them in the encrypted object store the architecture describes, behind the same
 interface.
 
+## 6b. The clinical records
+
+The last piece: the patients, the practitioners, the slots, the appointments, the encounters and the
+prescriptions were the last records still held in dictionaries.
+
+**The services do not hold records any more.** `RecordsService` and `SlotService` take a
+repository and ask it for what they need; `BookingService` keeps no copy of the appointments at all,
+because the appointments are the records of ENG-002 and the slot-to-appointment mapping is a
+question about the data — the data answers it. The behaviour is unchanged: the 375 tests that
+existed before the refactor passed without being touched, because the in-memory repository
+reproduces the dictionaries exactly.
+
+**Two details are worth knowing.**
+
+*The account link lives on the clinical rows.* `patient.account_ref` and
+`practitioner.account_ref` hold the id of the account the row belongs to — the link ENG-001's schema
+declares and ENG-002's records already carry. The appointment, the encounter, the prescription and
+the slot store the *clinical* id, and the account id is resolved with a join. There is one place
+where "which account is this patient" is written, and it cannot disagree with itself.
+
+*The display name is derived.* The tables hold the name parts — the family name and the given
+names — and the display name is assembled from them, because the display name is a presentation of
+the parts rather than a fact of its own.
+
+**The database is the guarantee against double-booking across instances.** The check in the service
+is a courtesy; the partial unique index of ENG-003 is the guarantee, and the store turns the
+database's refusal into the same `ConflictError` the service raises. The test that matters starts
+two threads booking the same slot on two services over one database: one is booked and one is
+refused, and there is one active appointment at the end.
+
 ## 7. Amendments to earlier features
 
 | File | Amendment | Why |
@@ -188,20 +222,21 @@ interface.
 | `db/auth_schema.sql` | The tables, indexes and triggers made re-runnable; the comment on `actor_user_id` corrected | The comment said the application writes `'anonymous'` into a `uuid` column, which it cannot |
 | `db/prescription_schema.sql` | The tables, indexes and triggers made re-runnable | The same |
 | `telemedicine/audit.py` | The actor of an entry may be `None` | A login for an account that does not exist has no actor, and the column is a `uuid` |
+| `telemedicine/records.py` | The records service and the slots take a repository; `Appointment` gained `cancellation_reason` and `cancelled_at` | The services no longer hold records; and the schema has always required a cancellation to carry a reason and a moment — the domain had nowhere to put them, and the database refused the row until it did |
+| `telemedicine/booking.py` | A cancellation records the reason and the moment; the service keeps no copy of the appointments | The same two reasons |
 | `db/prescription_schema.sql` | A `body bytea` column, and the trigger now refuses a `DELETE` as well as an `UPDATE` | The document has to be stored somewhere, and it must not be able to disappear |
 | `telemedicine/auth.py` | The lockout; the unknown actor has no id | SEC-04; and the type mismatch above |
 | `tests/test_schema.py`, `tests/test_auth_schema.py`, `tests/test_prescription_schema.py` | The schema parser knows about `IF NOT EXISTS` | The files changed shape |
 
 ## 8. Known gaps
 
-1. **The clinical data is still in memory.** The repositories of the application hold patients,
-   appointments, encounters and prescriptions in dictionaries. The tables they belong to exist, and
-   the schema runs, and the test that writes a whole clinical chain proves the relationships hold —
-   but the services do not use them yet. That is the next piece of work, and it is the last big one
-   between this project and a deployment.
-2. **The account and session tables are used now**, and the tests write a real clinical chain
-   through them, but the *services* still default to the in-memory repositories: a deployment has to
-   pass the database ones in.
+1. **The services still default to the in-memory repository.** The database implementation exists
+   and the tests use it, but a deployment has to pass it in — or the application has to choose it
+   when a connection string is set. That is a small change, and it is the last thing between this
+   project and a deployment that keeps its records.
+2. **The clinical repositories are new code that a deployment will meet on its first request.** They
+   are covered by the tests, and by the tests that write a whole clinical chain through them, but
+   they have not been exercised against a real workload.
 3. **No migration history.** The schema is applied by re-running the files, which works because
    they are re-runnable — but there is no record of which version a database was built from, and no
    way to step a database forward one version at a time. A deployment that changes a table needs a

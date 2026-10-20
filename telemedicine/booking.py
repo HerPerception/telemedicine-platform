@@ -50,7 +50,8 @@ from telemedicine.authorization import (
 )
 from telemedicine.errors import AuthorizationError, ConflictError, ValidationError
 from telemedicine.models import Role, UserAccount
-from telemedicine.records import Appointment
+from telemedicine.records import Appointment, RecordsService
+from telemedicine.repositories import InMemorySlotRepository, SlotRepository
 
 # Mirrors of the constraints in db/schema.sql (ENG-001), so that the service
 # refuses what the database would refuse.
@@ -163,11 +164,15 @@ class SlotService:
 
     def __init__(self, audit: Optional[AuditLog] = None,
                  authorizer: Optional[Authorizer] = None,
+                 repository: Optional[SlotRepository] = None,
                  clock=_utc_now):
         self.audit = audit if audit is not None else AuditLog(clock=clock)
         self.authorizer = authorizer if authorizer is not None else Authorizer()
+        # Where the slots live. The default is the memory of one process; a
+        # deployment passes the database one.
+        self.repository: SlotRepository = (
+            repository if repository is not None else InMemorySlotRepository())
         self._clock = clock
-        self._slots: Dict[str, Slot] = {}
         self._lock = threading.Lock()
 
     # -- writing ----------------------------------------------------------
@@ -197,7 +202,7 @@ class SlotService:
             raise ValidationError("slots start and end on whole minutes")
 
         with self._lock:
-            clashes = [slot for slot in self._slots.values()
+            clashes = [slot for slot in self.repository.list_slots()
                        if slot.practitioner_id == practitioner_id
                        and slot.status != "entered-in-error"
                        and slot.starts_at < ends_at and starts_at < slot.ends_at]
@@ -214,7 +219,7 @@ class SlotService:
                 timezone=timezone_name,
                 status=SLOT_FREE,
             )
-            self._slots[slot.slot_id] = slot
+            self.repository.save_slot(slot)
 
         self.audit.append(
             actor_user_id=actor.user_id,
@@ -238,7 +243,7 @@ class SlotService:
             raise ValidationError("the slot is booked and must be cancelled, not closed")
         with self._lock:
             closed = replace(slot, status="entered-in-error")
-            self._slots[slot.slot_id] = closed
+            self.repository.save_slot(closed)
         self.audit.append(
             actor_user_id=actor.user_id,
             actor_role=actor.role.value,
@@ -253,14 +258,13 @@ class SlotService:
     # -- reading ----------------------------------------------------------
 
     def get(self, slot_id: str) -> Slot:
-        slot = self._slots.get(slot_id)
+        slot = self.repository.get_slot(slot_id)
         if slot is None:
             raise ValidationError(f"no slot with id '{slot_id}'")
         return slot
 
     def list_slots(self, practitioner_id: str) -> List[Slot]:
-        return [slot for slot in self._slots.values()
-                if slot.practitioner_id == practitioner_id]
+        return self.repository.slots_for_practitioner(practitioner_id)
 
     def list_free_slots(self, practitioner_id: str, *, after: Optional[datetime] = None,
                         before: Optional[datetime] = None) -> List[Slot]:
@@ -288,10 +292,9 @@ class SlotService:
 
     def _set_status(self, slot_id: str, status: str) -> Slot:
         with self._lock:
-            slot = self._slots[slot_id]
+            slot = self.repository.get_slot(slot_id)
             updated = replace(slot, status=status)
-            self._slots[slot_id] = updated
-            return updated
+            return self.repository.save_slot(updated)
 
     def _require(self, actor: UserAccount, action: Action, resource_type: ResourceType,
                  scope: AccessScope, resource_id: str, detail: str) -> None:
@@ -324,10 +327,12 @@ class BookingService:
         # of a patient account; and the records service, so that a booked
         # appointment is visible to the read paths of ENG-002.
         self.accounts = accounts
-        self.records = records
+        # The appointments are the records of ENG-002, so the records service
+        # is where they live. The booking service keeps no copy: the slot to
+        # appointment mapping is a question about the data, and the data
+        # answers it.
+        self.records = records if records is not None else RecordsService(audit=self.audit)
         self._clock = clock
-        self._appointments: Dict[str, Appointment] = {}
-        self._appointment_by_slot: Dict[str, str] = {}
         self._lock = threading.Lock()
 
     # -- booking ----------------------------------------------------------
@@ -357,13 +362,11 @@ class BookingService:
             raise ValidationError("the slot is in the past")
 
         with self._lock:
-            if slot.slot_id in self._appointment_by_slot:
-                existing_id = self._appointment_by_slot[slot.slot_id]
-                existing = self._appointments.get(existing_id)
-                if existing is not None and existing.status != APPOINTMENT_CANCELLED:
-                    self._refuse(actor, ACTION_BOOK, ResourceType.APPOINTMENT.value, slot_id,
-                                 "the slot is already booked")
-                    raise ConflictError("the slot is no longer available")
+            existing = self.records.appointment_for_slot(slot.slot_id)
+            if existing is not None and existing.status != APPOINTMENT_CANCELLED:
+                self._refuse(actor, ACTION_BOOK, ResourceType.APPOINTMENT.value, slot_id,
+                             "the slot is already booked")
+                raise ConflictError("the slot is no longer available")
             appointment = Appointment(
                 appointment_id=str(uuid.uuid4()),
                 patient_id=patient_id,
@@ -375,8 +378,7 @@ class BookingService:
                 status=APPOINTMENT_BOOKED,
                 slot_id=slot.slot_id,
             )
-            self._appointments[appointment.appointment_id] = appointment
-            self._appointment_by_slot[slot.slot_id] = appointment.appointment_id
+            self.records.add_appointment(appointment)
 
         self.slots._set_status(slot.slot_id, SLOT_BUSY)
         if self.records is not None:
@@ -424,13 +426,12 @@ class BookingService:
             raise ValidationError("the new slot is in the past")
 
         with self._lock:
-            holder = self._appointment_by_slot.get(new_slot.slot_id)
-            if holder is not None and holder != appointment_id:
-                held = self._appointments.get(holder)
-                if held is not None and held.status != APPOINTMENT_CANCELLED:
-                    self._refuse(actor, ACTION_RESCHEDULE, ResourceType.APPOINTMENT.value,
-                                 appointment_id, "the new slot is already booked")
-                    raise ConflictError("the new slot is no longer available")
+            held = self.records.appointment_for_slot(new_slot.slot_id)
+            if (held is not None and held.appointment_id != appointment_id
+                    and held.status != APPOINTMENT_CANCELLED):
+                self._refuse(actor, ACTION_RESCHEDULE, ResourceType.APPOINTMENT.value,
+                             appointment_id, "the new slot is already booked")
+                raise ConflictError("the new slot is no longer available")
 
             old_slot_id = appointment.slot_id
             moved = replace(
@@ -439,10 +440,7 @@ class BookingService:
                 ends_at=new_slot.ends_at,
                 slot_id=new_slot.slot_id,
             )
-            self._appointments[appointment_id] = moved
-            self._appointment_by_slot[new_slot.slot_id] = appointment_id
-            if old_slot_id is not None and old_slot_id != new_slot.slot_id:
-                self._appointment_by_slot.pop(old_slot_id, None)
+            self.records.add_appointment(moved)
 
         if old_slot_id is not None and old_slot_id != new_slot.slot_id:
             self.slots._set_status(old_slot_id, SLOT_FREE)
@@ -481,10 +479,9 @@ class BookingService:
             raise ValidationError("a cancellation needs a reason")
 
         with self._lock:
-            cancelled = replace(appointment, status=APPOINTMENT_CANCELLED)
-            self._appointments[appointment_id] = cancelled
-            if appointment.slot_id is not None:
-                self._appointment_by_slot.pop(appointment.slot_id, None)
+            cancelled = replace(appointment, status=APPOINTMENT_CANCELLED,
+                                cancellation_reason=reason, cancelled_at=self._clock())
+            self.records.add_appointment(cancelled)
 
         if appointment.slot_id is not None:
             self.slots._set_status(appointment.slot_id, SLOT_FREE)
@@ -504,14 +501,14 @@ class BookingService:
     # -- reading ----------------------------------------------------------
 
     def get_appointment(self, appointment_id: str) -> Appointment:
-        appointment = self._appointments.get(appointment_id)
+        appointment = self.records.get_appointment(appointment_id)
         if appointment is None:
             raise ValidationError(f"no appointment with id '{appointment_id}'")
         return appointment
 
     def list_appointments(self, *, patient_user_id: Optional[str] = None,
                           practitioner_id: Optional[str] = None) -> List[Appointment]:
-        appointments = list(self._appointments.values())
+        appointments = self.records.list_appointments()
         if patient_user_id is not None:
             appointments = [item for item in appointments
                             if item.patient_user_id == patient_user_id]
@@ -522,10 +519,7 @@ class BookingService:
 
     def is_slot_booked(self, slot_id: str) -> bool:
         """Whether an active appointment occupies a slot."""
-        appointment_id = self._appointment_by_slot.get(slot_id)
-        if appointment_id is None:
-            return False
-        appointment = self._appointments.get(appointment_id)
+        appointment = self.records.appointment_for_slot(slot_id)
         return appointment is not None and appointment.status != APPOINTMENT_CANCELLED
 
     # -- internals --------------------------------------------------------

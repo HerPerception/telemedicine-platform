@@ -68,6 +68,7 @@ finding numbers in those rows — PRIV-02, SEC-05 and so on — are that review'
 | AC-SEC-08 | The audit log survives a restart, and the chain does not fork | covered | `tests/test_persistence.py::DurableAuditLogTest::test_the_log_survives_a_restart`; `tests/test_persistence.py::DurableAuditLogTest::test_two_writers_do_not_fork_the_chain`; `tests/test_persistence.py::DurableAuditLogTest::test_a_tampered_entry_is_detected` | ENG-007 | The tests need a PostgreSQL server and are skipped without one |
 | AC-SEC-09 | A session issued on one instance is accepted by the others | covered | `tests/test_persistence_state.py::SessionTest::test_a_session_is_accepted_by_another_instance`; `tests/test_persistence_state.py::SessionTest::test_a_revoked_session_is_refused_by_another_instance`; `tests/test_persistence_state.py::AccountTest::test_a_password_hashed_in_one_instance_verifies_in_another` | ENG-008 | The tests need a PostgreSQL server and are skipped without one |
 | AC-DATA-01 | The clinical model is documented and mapped onto FHIR R4 | covered | `tests/test_fhir_examples.py::ExampleResourcesTest::test_all_examples_are_valid`; `tests/test_fhir_examples.py::ExampleResourcesTest::test_cross_references_resolve`; `tests/test_schema.py::SchemaStructureTest::test_all_six_tables_are_defined`; `tests/test_fhir_serialization.py::SerializationTest::test_every_resource_satisfies_the_published_profile` | ENG-001 | |
+| AC-DATA-03 | A clinical record survives a restart and is shared between the instances | covered | `tests/test_persistence_clinical.py::RecordTest::test_the_records_survive_a_restart`; `tests/test_persistence_clinical.py::RecordTest::test_two_services_share_the_records`; `tests/test_persistence_clinical.py::TreatmentRelationshipTest::test_the_treating_clinician_is_found_from_the_data`; `tests/test_persistence_clinical.py::DoubleBookingTest::test_two_instances_racing_for_one_slot_produce_one_appointment` | ENG-009 | The tests need a PostgreSQL server and are skipped without one |
 | AC-DATA-02 | The database refuses what the rules forbid | covered | `tests/test_schema.py::SchemaStructureTest::test_appointment_window_must_match_the_slot`; `tests/test_schema.py::SchemaStructureTest::test_cancelled_appointments_need_a_reason`; `tests/test_schema.py::SchemaStructureTest::test_status_columns_are_constrained_to_known_values`; `tests/test_auth_schema.py::AuthSchemaStructureTest::test_audit_log_is_append_only`; `tests/test_prescription_schema.py::PrescriptionSchemaTest::test_a_document_cannot_be_rewritten` | ENG-001 | |
 
 ## The non-functional gates
@@ -97,7 +98,8 @@ the conditions of a deployment, and the review of OPS-001 assessed them.
 | ENG-003 | AC-BOOK-05 (the notification needs a transport) |
 | OPS-001 | AC-GATE-01, AC-GATE-03, AC-GATE-04, AC-GATE-05, AC-GATE-10, AC-GATE-11, and the partial ones |
 | ENG-007 | none of the criteria; the clinical repositories are the remaining work |
-| ENG-008 | none of the criteria; the clinical repositories are still the remaining work |
+| ENG-008 | none of the criteria; the clinical repositories were the remaining work |
+| ENG-009 | none of the criteria; making the database the default is the remaining work |
 | OPS-002 | AC-GATE-09 |
 
 The criteria are deliberately not all covered, and the ones that are not are named with the reason.
