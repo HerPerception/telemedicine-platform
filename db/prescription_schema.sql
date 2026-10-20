@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS prescription_document (
     -- The status the prescription had when the document was rendered. The
     -- document is a snapshot; this makes that explicit.
     rendered_from_status  text,
+    -- The document itself. A deployment would put the bytes in the
+    -- encrypted object store that the architecture describes, and this
+    -- column would hold the key; here the bytes live in the database, which
+    -- is the same behaviour behind a different storage.
+    body                  bytea,
     created_at            timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT prescription_document_checksum_shape
         CHECK (checksum ~ '^[0-9a-f]{64}$'),
@@ -56,10 +61,16 @@ CREATE TABLE IF NOT EXISTS prescription_document (
 
 CREATE INDEX IF NOT EXISTS prescription_document_created ON prescription_document (created_at);
 
+-- A table that was created before the body column existed gets it here, so
+-- that re-running this file upgrades it rather than doing nothing.
+ALTER TABLE prescription_document ADD COLUMN IF NOT EXISTS body bytea;
+
 -- The document is written once. A change to an existing document is refused
 -- by the trigger below, in the same way the audit log is append-only: a
 -- prescription document that could be edited after the fact would not be a
--- record of anything.
+-- record of anything. A deletion is refused for the same reason — a
+-- prescription that has been printed and handed to a pharmacy must not be
+-- able to disappear.
 CREATE OR REPLACE FUNCTION prescription_document_is_immutable() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -70,7 +81,7 @@ $$;
 
 DROP TRIGGER IF EXISTS prescription_document_no_update ON prescription_document;
 CREATE TRIGGER prescription_document_no_update
-    BEFORE UPDATE ON prescription_document
+    BEFORE UPDATE OR DELETE ON prescription_document
     FOR EACH ROW EXECUTE FUNCTION prescription_document_is_immutable();
 
 -- ---------------------------------------------------------------------------

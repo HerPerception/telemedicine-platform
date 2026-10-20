@@ -14,10 +14,10 @@ documented; only because it is done.
 | Area | Findings | Closed | Partly closed | Open |
 | --- | --- | --- | --- | --- |
 | Privacy | 8 | 1 | 1 | 6 |
-| Security | 16 | 3 | 1 | 12 |
+| Security | 16 | 4 | 1 | 11 |
 | Accessibility | 4 | 0 | 1 | 3 |
 | Regulatory | 11 | 0 | 0 | 11 |
-| **Total** | **37** | **4** | **3** | **30** |
+| **Total** | **37** | **5** | **3** | **29** |
 
 The sign-off conditions of §8 of the review are listed at the end, with their state.
 
@@ -54,6 +54,7 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | SEC-14 No request logging | Low | open | An access log at the proxy |
 | SEC-15 The server is a development server | Low | open | A real server behind a proxy |
 | SEC-16 Any client with a token can call the API | Low | open | A policy to state rather than to implement |
+| *(new)* The accounts, the sessions and the prescription documents were held in memory, so they were neither shared between instances nor durable | — | **closed** | `telemedicine/persistence/account_store.py` and `document_store.py`: the `user_account`, `auth_session` and `prescription_document` tables. A session issued on one instance is accepted by another, which is what decides where a request may be load-balanced to |
 
 ## Accessibility
 
