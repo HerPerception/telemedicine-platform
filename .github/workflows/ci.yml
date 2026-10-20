@@ -1,0 +1,58 @@
+# Continuous integration for the telemedicine platform.
+#
+# The suite is the acceptance evidence for this repository: it has no
+# third-party dependency, so it needs nothing but Python. The two commands
+# below are the ones AGENTS.md documents, and the traceability check in
+# tests/test_acceptance_criteria.py fails the build if a criterion loses
+# its test.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the test suite
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Validate the FHIR examples against the declared mapping
+        run: python3 scripts/validate_fhir_examples.py
+
+  # A second job so that a failure is visible in the checks list next to
+  # the suite rather than inside its log.
+  acceptance:
+    name: Acceptance criteria are traced
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Every acceptance criterion has a test, or a reason
+        run: python3 -m unittest tests.test_acceptance_criteria -v
