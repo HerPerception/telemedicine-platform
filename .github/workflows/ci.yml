@@ -1,10 +1,10 @@
 # Continuous integration for the telemedicine platform.
 #
-# The suite is the acceptance evidence for this repository: it has no
-# third-party dependency, so it needs nothing but Python. The two commands
-# below are the ones AGENTS.md documents, and the traceability check in
-# tests/test_acceptance_criteria.py fails the build if a criterion loses
-# its test.
+# The suite is the acceptance evidence for this repository: it has one
+# third-party dependency, the PostgreSQL driver, and needs a server to run
+# the persistence tests. The two commands below are the ones AGENTS.md
+# documents, and the traceability check in tests/test_acceptance_criteria.py
+# fails the build if a criterion loses its test.
 
 name: CI
 
@@ -21,7 +21,28 @@ jobs:
   test:
     name: Test suite
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+
+    # A PostgreSQL for the persistence tests. The image includes contrib, so
+    # the btree_gist extension — and with it the exclusion constraint that
+    # stops overlapping slots — is there.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: telemedicine_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TELEMEDICINE_TEST_DSN: postgresql://postgres:postgres@localhost:5432/telemedicine_test
 
     steps:
       - name: Check out the repository
@@ -32,11 +53,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install the PostgreSQL driver
+        run: python3 -m pip install --quiet "psycopg[binary]>=3.1,<4"
+
       - name: Run the test suite
         run: python3 -m unittest discover -s tests -v
 
       - name: Validate the FHIR examples against the declared mapping
         run: python3 scripts/validate_fhir_examples.py
+
+      - name: Apply the schema to a clean database
+        run: python3 scripts/apply_schema.py "$TELEMEDICINE_TEST_DSN"
 
   # A second job so that a failure is visible in the checks list next to
   # the suite rather than inside its log.

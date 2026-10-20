@@ -21,12 +21,17 @@
 -- For PostgreSQL 12 and older, also run: CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- btree_gist is required for the GiST exclusion constraint on schedule_slot.
 
+-- The exclusion constraint below needs this extension, which is part of
+-- PostgreSQL's contrib. The statements that need it are marked, so that the
+-- schema can be applied to a server without it — and the report says what
+-- was skipped. In a production installation the extension is there.
+-- @requires-extension btree_gist
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- ---------------------------------------------------------------------------
 -- patient
 -- ---------------------------------------------------------------------------
-CREATE TABLE patient (
+CREATE TABLE IF NOT EXISTS patient (
     id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     -- Business identifier surfaced as Patient.identifier (system .../identifier/mrn).
     mrn                 text        NOT NULL UNIQUE,
@@ -57,7 +62,7 @@ CREATE TABLE patient (
 -- ---------------------------------------------------------------------------
 -- practitioner
 -- ---------------------------------------------------------------------------
-CREATE TABLE practitioner (
+CREATE TABLE IF NOT EXISTS practitioner (
     id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     -- National Provider Identifier -> Practitioner.identifier
     -- (system http://hl7.org/fhir/sid/us-npi). Optional: not every
@@ -88,7 +93,7 @@ CREATE TABLE practitioner (
 -- FHIR: the Slot resource. The MVP exposes five core resources, so Slot is
 -- stored and mapped but is not a first-class FHIR endpoint in ENG-006; it is
 -- referenced by Appointment.slot.
-CREATE TABLE schedule_slot (
+CREATE TABLE IF NOT EXISTS schedule_slot (
     id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     practitioner_id uuid        NOT NULL REFERENCES practitioner (id) ON DELETE RESTRICT,
     starts_at       timestamptz NOT NULL,
@@ -113,18 +118,26 @@ CREATE TABLE schedule_slot (
 
 -- No practitioner may have two overlapping slots. This is the first line of
 -- defence against double-booking; the second is appointment.slot_id UNIQUE.
-CREATE INDEX schedule_slot_practitioner_range
+-- @requires-extension btree_gist
+CREATE INDEX IF NOT EXISTS schedule_slot_practitioner_range
     ON schedule_slot USING gist (practitioner_id, tstzrange(starts_at, ends_at));
 
-ALTER TABLE schedule_slot
-    ADD CONSTRAINT schedule_slot_no_overlap
-    EXCLUDE USING gist (practitioner_id WITH =,
-                        tstzrange(starts_at, ends_at) WITH &&);
+-- @requires-extension btree_gist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'schedule_slot_no_overlap') THEN
+        ALTER TABLE schedule_slot
+            ADD CONSTRAINT schedule_slot_no_overlap
+            EXCLUDE USING gist (practitioner_id WITH =,
+                                tstzrange(starts_at, ends_at) WITH &&);
+    END IF;
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- appointment
 -- ---------------------------------------------------------------------------
-CREATE TABLE appointment (
+CREATE TABLE IF NOT EXISTS appointment (
     id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     patient_id          uuid        NOT NULL REFERENCES patient (id) ON DELETE RESTRICT,
     practitioner_id     uuid        NOT NULL REFERENCES practitioner (id) ON DELETE RESTRICT,
@@ -166,9 +179,9 @@ CREATE TABLE appointment (
         UNIQUE (id, patient_id, practitioner_id)
 );
 
-CREATE INDEX appointment_practitioner_start ON appointment (practitioner_id, starts_at);
-CREATE INDEX appointment_patient_start      ON appointment (patient_id, starts_at);
-CREATE INDEX appointment_status             ON appointment (status);
+CREATE INDEX IF NOT EXISTS appointment_practitioner_start ON appointment (practitioner_id, starts_at);
+CREATE INDEX IF NOT EXISTS appointment_patient_start      ON appointment (patient_id, starts_at);
+CREATE INDEX IF NOT EXISTS appointment_status             ON appointment (status);
 
 -- At most one *active* appointment may occupy a slot. A cancelled
 -- appointment keeps its reference to the slot it occupied, so the record of
@@ -176,13 +189,13 @@ CREATE INDEX appointment_status             ON appointment (status);
 -- again. Without this, cancelling an appointment would leave the slot
 -- unusable for ever, because the old unique constraint would still see the
 -- cancelled appointment's row.
-CREATE UNIQUE INDEX appointment_active_slot_key
+CREATE UNIQUE INDEX IF NOT EXISTS appointment_active_slot_key
     ON appointment (slot_id) WHERE status <> 'cancelled';
 
 -- ---------------------------------------------------------------------------
 -- encounter — the clinical encounter produced by a visit.
 -- ---------------------------------------------------------------------------
-CREATE TABLE encounter (
+CREATE TABLE IF NOT EXISTS encounter (
     id                 uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     appointment_id     uuid        NOT NULL UNIQUE,
     patient_id         uuid        NOT NULL REFERENCES patient (id) ON DELETE RESTRICT,
@@ -214,17 +227,23 @@ CREATE TABLE encounter (
         FOREIGN KEY (appointment_id, patient_id, practitioner_id)
         REFERENCES appointment (id, patient_id, practitioner_id)
         ON DELETE RESTRICT,
+    -- Unique target for the composite foreign key of medication_request below.
+    -- Found when the schema was applied to a real server for the first time,
+    -- in ENG-007: the foreign key needs this key to be unique, and it was
+    -- not declared.
+    CONSTRAINT encounter_identity
+        UNIQUE (id, patient_id, practitioner_id),
     CONSTRAINT encounter_ends_after_start
         CHECK (ended_at IS NULL OR ended_at >= started_at)
 );
 
-CREATE INDEX encounter_patient_started ON encounter (patient_id, started_at);
-CREATE INDEX encounter_practitioner    ON encounter (practitioner_id);
+CREATE INDEX IF NOT EXISTS encounter_patient_started ON encounter (patient_id, started_at);
+CREATE INDEX IF NOT EXISTS encounter_practitioner    ON encounter (practitioner_id);
 
 -- ---------------------------------------------------------------------------
 -- medication_request — the e-prescription.
 -- ---------------------------------------------------------------------------
-CREATE TABLE medication_request (
+CREATE TABLE IF NOT EXISTS medication_request (
     id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id        uuid        NOT NULL REFERENCES encounter (id) ON DELETE RESTRICT,
     patient_id          uuid        NOT NULL REFERENCES patient (id) ON DELETE RESTRICT,
@@ -265,10 +284,10 @@ CREATE TABLE medication_request (
         ON DELETE RESTRICT
 );
 
-CREATE INDEX medication_request_patient_authored
+CREATE INDEX IF NOT EXISTS medication_request_patient_authored
     ON medication_request (patient_id, authored_on);
-CREATE INDEX medication_request_encounter ON medication_request (encounter_id);
-CREATE INDEX medication_request_prescriber ON medication_request (prescriber_id);
+CREATE INDEX IF NOT EXISTS medication_request_encounter ON medication_request (encounter_id);
+CREATE INDEX IF NOT EXISTS medication_request_prescriber ON medication_request (prescriber_id);
 
 -- ---------------------------------------------------------------------------
 -- Comments on maintenance behaviour.

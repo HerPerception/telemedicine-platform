@@ -39,6 +39,11 @@ exists; check the repository before assuming anything.
 | `tests/` | `unittest` suites for the FHIR examples, the schema files, authentication, authorization, audit, slots, booking, prescriptions, the FHIR API, the compliance remediations, the acceptance criteria and the video rooms |
 | `.github/workflows/ci.yml` | The continuous integration: the suite, the validator and the traceability check |
 | `multi-agent-orchestrator/` | Agent coordination bookkeeping — **not** product code. Do not edit it as part of a feature. |
+| `docs/persistence-design.md` | The database: the schema, the durable audit log, the shared lockout and the dependency |
+| `docs/reviews/remediation-status.md` | Whether each finding of the compliance review is closed |
+| `db/security_schema.sql` | PostgreSQL DDL for the shared lockout counter (ENG-007) |
+| `telemedicine/persistence/` | The database, the durable audit log and the shared lockout (ENG-007) |
+| `scripts/apply_schema.py` | Applies the database schema, and says what it skipped |
 
 ## Verified commands
 
@@ -56,7 +61,20 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (343 tests).
+Expected result of the test command: `OK` (359 tests, 16 of them skipped without a database).
+
+The persistence tests need a PostgreSQL server, and are skipped without one:
+
+```bash
+TELEMEDICINE_TEST_DSN="postgresql://postgres@localhost/postgres" \
+    python3 -m unittest discover -s tests -v
+```
+
+The schema is applied with:
+
+```bash
+python3 scripts/apply_schema.py "postgresql://user@host/database"
+```
 
 One test reads a generated PDF with poppler's `pdftotext` and is skipped when that tool is not
 installed.
@@ -74,9 +92,14 @@ path rather than a guess.
 
 ## Conventions
 
-- Python 3.12, standard library only, until a dependency manifest is added.
+- Python 3.12. The application code is standard library only; the one dependency is
+  `psycopg[binary]`, the PostgreSQL driver, which the persistence layer needs and no standard
+  library can provide. It is declared in `pyproject.toml`.
 - Tests use `unittest` (not pytest) because no third-party dependency is installed.
-- SQL targets PostgreSQL 13+; see the header of each file in `db/`.
+- SQL targets PostgreSQL 13+; see the header of each file in `db/`. The files are re-runnable:
+  tables and indexes are created if they are not there, and triggers are dropped and created
+  again. A statement that needs an extension the server does not have is marked with
+  `-- @requires-extension` and skipped, and the apply says so.
 - FHIR content targets **R4 (4.0.1)**. Verify element names, cardinalities and value sets against
   the published StructureDefinitions at `https://hl7.org/fhir/R4/<resource>.profile.json` rather
   than from memory.

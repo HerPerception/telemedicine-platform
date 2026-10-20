@@ -22,6 +22,7 @@ from typing import Callable, Dict, Optional, Tuple
 from telemedicine.audit import OUTCOME_DENIED, OUTCOME_SUCCESS, AuditLog
 from telemedicine.errors import AuthenticationError, ValidationError
 from telemedicine.models import Role, Session, UserAccount
+from telemedicine.persistence.lockout import InMemoryLockoutStore, LockoutStore
 from telemedicine.security import (
     DEFAULT_ITERATIONS,
     generate_token,
@@ -33,13 +34,27 @@ from telemedicine.security import (
 MIN_PASSWORD_LENGTH = 12
 DEFAULT_SESSION_TTL = timedelta(hours=8)
 
+# The lockout policy (SEC-04 of the compliance review). After this many
+# consecutive failures the account is locked, and every further failure
+# doubles the lock, up to the maximum. The counter has to be shared between
+# the instances of the application, which is why it is a store and not a
+# field of the service.
+LOCKOUT_THRESHOLD = 5
+LOCKOUT_BASE_DELAY = timedelta(minutes=1)
+LOCKOUT_MAX_DELAY = timedelta(minutes=15)
+
 # Audit actions used by this module.
 ACTION_ACCOUNT_CREATE = "account.create"
 ACTION_LOGIN = "auth.login"
 ACTION_LOGOUT = "auth.logout"
 ACTION_PASSWORD_CHANGE = "auth.password_change"
+ACTION_LOCKED = "auth.locked"
 
-UNKNOWN_ACTOR = "anonymous"
+# The actor of a login for an account that does not exist is not known, so it
+# has no id. The resource it refers to still has a name, because the
+# resource_id column of the audit log is not nullable.
+UNKNOWN_ACTOR = None
+UNKNOWN_RESOURCE = "anonymous"
 
 
 def _utc_now() -> datetime:
@@ -154,14 +169,25 @@ class AuthService:
     def __init__(self, users: Optional[UserRepository] = None,
                  audit: Optional[AuditLog] = None,
                  sessions: Optional[SessionStore] = None,
+                 lockout: Optional[LockoutStore] = None,
                  *, password_iterations: int = DEFAULT_ITERATIONS,
                  session_ttl: timedelta = DEFAULT_SESSION_TTL,
+                 lockout_threshold: int = LOCKOUT_THRESHOLD,
+                 lockout_base_delay: timedelta = LOCKOUT_BASE_DELAY,
+                 lockout_max_delay: timedelta = LOCKOUT_MAX_DELAY,
                  clock: Callable[[], datetime] = _utc_now):
         self.users = users if users is not None else UserRepository()
         self.audit = audit if audit is not None else AuditLog(clock=clock)
         self.sessions = sessions if sessions is not None else SessionStore()
+        # The lockout counter is a store, so that several instances of the
+        # application share it. The default is the in-memory one, which is
+        # right for a single process and wrong for two.
+        self.lockout = lockout if lockout is not None else InMemoryLockoutStore()
         self.password_iterations = password_iterations
         self.session_ttl = session_ttl
+        self.lockout_threshold = lockout_threshold
+        self.lockout_base_delay = lockout_base_delay
+        self.lockout_max_delay = lockout_max_delay
         self._clock = clock
         # A hash of a value nobody knows, used to spend the same time on a
         # login for an account that does not exist as on a login with a
@@ -270,16 +296,23 @@ class AuthService:
                                       "malformed email address")
             raise AuthenticationError("invalid credentials") from None
 
+        now = self._clock()
+        if self._is_locked(normalized, now):
+            self._audit_locked(normalized)
+            raise AuthenticationError("invalid credentials")
+
         account = self.users.get_by_email(normalized)
         if account is None:
             # Spend the same time as a real verification, so that the
             # response does not reveal whether the account exists.
             verify_password(password, self._decoy_hash)
+            self._record_failure(normalized, now)
             self._audit_login_failure(UNKNOWN_ACTOR, "unknown", normalized,
                                       "no such account")
             raise AuthenticationError("invalid credentials")
 
         if not verify_password(password, account.password_hash):
+            self._record_failure(normalized, now)
             self._audit_login_failure(account.user_id, account.role.value, normalized,
                                       "password did not match")
             raise AuthenticationError("invalid credentials")
@@ -288,6 +321,8 @@ class AuthService:
             self._audit_login_failure(account.user_id, account.role.value, normalized,
                                       "account is disabled")
             raise AuthenticationError("invalid credentials")
+
+        self.lockout.record_success(normalized)
 
         self.audit.append(
             actor_user_id=account.user_id,
@@ -300,6 +335,31 @@ class AuthService:
         )
         return account
 
+    def _is_locked(self, key: str, now: datetime) -> bool:
+        """Whether the key is locked out at this moment."""
+        until = self.lockout.locked_until(key)
+        return until is not None and now < until
+
+    def _record_failure(self, key: str, now: datetime) -> None:
+        """Count a failure, and lock the key when there are too many."""
+        attempts = self.lockout.record_failure(key, now)
+        if attempts < self.lockout_threshold:
+            return
+        delay = self.lockout_base_delay * (2 ** (attempts - self.lockout_threshold))
+        delay = min(delay, self.lockout_max_delay)
+        self.lockout.set_locked_until(key, now + delay)
+
+    def _audit_locked(self, email: str) -> None:
+        self.audit.append(
+            actor_user_id=UNKNOWN_ACTOR,
+            actor_role="unknown",
+            action=ACTION_LOCKED,
+            resource_type="user_account",
+            resource_id=UNKNOWN_RESOURCE,
+            outcome=OUTCOME_DENIED,
+            detail=f"the account is locked after too many failures ({mask_email(email)})",
+        )
+
     def _audit_login_failure(self, actor_user_id: str, actor_role: str, email: str,
                               detail: str) -> None:
         self.audit.append(
@@ -307,7 +367,7 @@ class AuthService:
             actor_role=actor_role,
             action=ACTION_LOGIN,
             resource_type="user_account",
-            resource_id=actor_user_id,
+            resource_id=actor_user_id or UNKNOWN_RESOURCE,
             outcome=OUTCOME_DENIED,
             detail=f"{detail} ({mask_email(email)})",
         )

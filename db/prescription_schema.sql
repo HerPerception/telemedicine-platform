@@ -28,7 +28,7 @@
 -- issued and is never rewritten, so a later status change does not alter
 -- it. That is deliberate: a prescription that has been printed and handed
 -- to a pharmacy must not be able to change afterwards.
-CREATE TABLE prescription_document (
+CREATE TABLE IF NOT EXISTS prescription_document (
     id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     medication_request_id uuid        NOT NULL UNIQUE
                                      REFERENCES medication_request (id) ON DELETE RESTRICT,
@@ -54,7 +54,7 @@ CREATE TABLE prescription_document (
         CHECK (storage_key <> '')
 );
 
-CREATE INDEX prescription_document_created ON prescription_document (created_at);
+CREATE INDEX IF NOT EXISTS prescription_document_created ON prescription_document (created_at);
 
 -- The document is written once. A change to an existing document is refused
 -- by the trigger below, in the same way the audit log is append-only: a
@@ -68,6 +68,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS prescription_document_no_update ON prescription_document;
 CREATE TRIGGER prescription_document_no_update
     BEFORE UPDATE ON prescription_document
     FOR EACH ROW EXECUTE FUNCTION prescription_document_is_immutable();

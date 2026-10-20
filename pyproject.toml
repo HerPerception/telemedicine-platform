@@ -1,0 +1,42 @@
+[project]
+name = "telemedicine"
+version = "0.1.0"
+description = "A personal telemedicine practice: booking, video consultation, e-prescription and a FHIR R4 API."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+
+# The application code is standard library only, with one exception: talking to
+# PostgreSQL needs a driver. There is no such thing in the standard library,
+# and there is no honest way to persist a clinical record without one.
+#
+# psycopg 3 is the reference driver, it supports the PostgreSQL 13+ that
+# db/schema.sql targets, and it is the only runtime dependency of the project.
+dependencies = [
+    "psycopg[binary]>=3.1,<4",
+]
+
+[project.optional-dependencies]
+# A PostgreSQL that runs itself, so that the database tests can be run by
+# anyone without installing a database. The continuous integration uses the
+# postgres service of the runner instead, and does not need this.
+dev = [
+    "pgserver>=0.1",
+]
+
+[project.scripts]
+telemedicine-apply-schema = "telemedicine.persistence.database:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "telemedicine",
+    "telemedicine.fhir",
+    "telemedicine.persistence",
+]
+
+[tool.setuptools.package-data]
+telemedicine = ["py.typed"]

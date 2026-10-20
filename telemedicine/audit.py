@@ -52,7 +52,10 @@ class AuditEntry:
 
     sequence: int
     occurred_at: str
-    actor_user_id: str
+    # The account the action was performed by. It is None when the account is
+    # not known — a login for an address that has no account, for instance —
+    # which is not the same as an id.
+    actor_user_id: Optional[str]
     actor_role: str
     action: str
     resource_type: str
@@ -91,7 +94,7 @@ class AuditLog:
 
     # -- writing ----------------------------------------------------------
 
-    def append(self, *, actor_user_id: str, actor_role: str, action: str,
+    def append(self, *, actor_user_id: Optional[str], actor_role: str, action: str,
                resource_type: str, resource_id: str, outcome: str = OUTCOME_SUCCESS,
                detail: str = "") -> AuditEntry:
         """Append an entry and return it.
