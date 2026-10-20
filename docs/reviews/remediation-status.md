@@ -14,10 +14,10 @@ documented; only because it is done.
 | Area | Findings | Closed | Partly closed | Open |
 | --- | --- | --- | --- | --- |
 | Privacy | 8 | 1 | 1 | 6 |
-| Security | 16 | 4 | 1 | 11 |
+| Security | 16 | 5 | 1 | 10 |
 | Accessibility | 4 | 0 | 1 | 3 |
 | Regulatory | 11 | 0 | 0 | 11 |
-| **Total** | **37** | **5** | **3** | **29** |
+| **Total** | **37** | **6** | **3** | **28** |
 
 The sign-off conditions of §8 of the review are listed at the end, with their state.
 
@@ -44,7 +44,7 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | SEC-04 No lockout, and none that works across instances | High | **closed** | The counter is a store; `PostgresLockoutStore` shares it between instances (`telemedicine/persistence/lockout.py`). It counts per account, not per source address — see the design document |
 | SEC-05 No TLS | High | open | A deployment has to terminate it |
 | SEC-06 The audit log did not survive a restart | High | **closed** | `PostgresAuditLog` writes the chain to the `audit_log` table, under an advisory lock (`telemedicine/persistence/audit_store.py`) |
-| SEC-07 The chain is anchored nowhere outside the store | Medium | open | Needs a system outside the database: a published digest, or a write-once store |
+| SEC-07 The chain is anchored nowhere outside the store | Medium | **closed** | `telemedicine/audit_anchor.py`: the head of the chain is published outside the database, and `scripts/verify_audit_chain.py` checks the chain against the anchors. A chain rewritten from the beginning verifies internally and fails against the anchors |
 | SEC-08 No OAuth2 and no SMART on FHIR | Medium | open | A decision first: a first-party-only API is legitimate for a single-clinician practice, but it has to be a decision |
 | SEC-09 No CORS policy | Medium | open | An allowlist, when there is a client |
 | SEC-10 No conditional create or update | Medium | open | `If-Match` against the resource version |

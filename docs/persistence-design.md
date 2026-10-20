@@ -294,6 +294,10 @@ discovered by a patient rather than by a monitor.
     between keeping them apart and keeping the transaction simple, and one that has to be reviewed
     before a deployment: an attacker who can write to the audit log may be able to write to the
     clinical tables.
+11. **The anchor file is on the same machine as the application.** It is outside the database, which
+    is what SEC-07 asked for, but an attacker with write access to the filesystem can reach it too.
+    A deployment that wants the anchor to be worth something has to put the file somewhere the
+    application cannot write to, or publish it to a service of its own — the interface is the same.
 
 ## 9. What the successor needs
 

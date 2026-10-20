@@ -149,6 +149,14 @@ class AuditLog:
     def entries_for_outcome(self, outcome: str) -> Tuple[AuditEntry, ...]:
         return tuple(entry for entry in self._entries if entry.outcome == outcome)
 
+    def head_hash(self) -> Optional[str]:
+        """The hash of the last entry, or None when the log is empty.
+
+        The head of the chain is what an anchor publishes, so that a chain
+        rewritten afterwards can be told apart from an untouched one.
+        """
+        return self._entries[-1].entry_hash if self._entries else None
+
     # -- integrity --------------------------------------------------------
 
     def verify_chain(self) -> bool:
