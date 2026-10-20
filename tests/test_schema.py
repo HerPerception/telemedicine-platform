@@ -87,9 +87,14 @@ class SchemaStructureTest(unittest.TestCase):
         self.assertIn("EXCLUDE USING gist", self.clean)
         self.assertIn("schedule_slot_no_overlap", self.clean)
 
-    def test_appointment_slot_is_unique(self):
+    def test_appointment_slot_is_unique_among_active_appointments(self):
+        # Amended by ENG-003: a cancelled appointment keeps its reference to
+        # the slot it occupied, so the uniqueness is a partial index over the
+        # active appointments of a slot rather than a plain unique column.
         appointment = "\n".join(self.tables["appointment"])
-        self.assertRegex(appointment, r"slot_id\s+uuid\s+NOT NULL UNIQUE")
+        self.assertRegex(appointment, r"slot_id\s+uuid\s+NOT NULL")
+        self.assertIn("appointment_active_slot_key", self.clean)
+        self.assertIn("WHERE status <> 'cancelled'", self.clean)
 
     def test_appointment_window_must_match_the_slot(self):
         self.assertIn("appointment_slot_match", self.clean)

@@ -148,7 +148,7 @@ Source: `appointment` table. Target: `Appointment` (R4 4.0.1).
 | `Appointment.start` | 0..1 | `appointment.starts_at` | `instant` — UTC with explicit offset |
 | `Appointment.end` | 0..1 | `appointment.ends_at` | `instant` |
 | `Appointment.minutesDuration` | 0..1 | `appointment.duration_minutes` | `positiveInt`; must equal the window length |
-| `Appointment.slot` | 0..* | `appointment.slot_id` | Reference to the `Slot` resource |
+| `Appointment.slot` | 0..* | `appointment.slot_id` | Reference to the `Slot` resource. A cancelled appointment keeps this reference, so the FHIR record still shows which window was booked and released, while the slot may be booked again |
 | `Appointment.created` | 0..1 | `appointment.created_at` | `dateTime` |
 | `Appointment.comment` | 0..1 | `appointment.patient_note` | |
 | `Appointment.patientInstruction` | 0..1 | — | Not stored; ENG-003 may reuse `patient_note` for this |

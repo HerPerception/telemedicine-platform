@@ -40,6 +40,9 @@ class ResourceType(str, enum.Enum):
     APPOINTMENT = "appointment"
     ENCOUNTER = "encounter"
     MEDICATION_REQUEST = "medication_request"
+    # Added by ENG-003 (appointment booking and schedule management): the
+    # bookable windows in a practitioner's schedule.
+    SLOT = "slot"
 
     def __str__(self) -> str:  # pragma: no cover - convenience only
         return self.value
@@ -127,6 +130,23 @@ RULES: Tuple[Rule, ...] = (
          "a practitioner may read prescriptions they issued or that concern a patient they treat"),
     Rule(Role.PRACTITIONER, ResourceType.MEDICATION_REQUEST, Action.CREATE, TREATING,
          "only the treating clinician may issue a prescription"),
+
+    # --- ENG-003: booking and schedule management ------------------------
+    # A patient books, reschedules and cancels their own appointments; a
+    # practitioner does the same for the patients they treat, and manages the
+    # slots of their own schedule.
+    Rule(Role.PATIENT, ResourceType.APPOINTMENT, Action.CREATE, OWN,
+         "a patient may book an appointment for themselves"),
+    Rule(Role.PATIENT, ResourceType.APPOINTMENT, Action.UPDATE, OWN,
+         "a patient may reschedule or cancel their own appointment"),
+    Rule(Role.PRACTITIONER, ResourceType.APPOINTMENT, Action.CREATE, TREATING,
+         "a practitioner may book an appointment in their own schedule for a patient they treat"),
+    Rule(Role.PRACTITIONER, ResourceType.APPOINTMENT, Action.UPDATE, TREATING,
+         "a practitioner may reschedule or cancel appointments they deliver"),
+    Rule(Role.PRACTITIONER, ResourceType.SLOT, Action.CREATE, OWN,
+         "a practitioner may open slots in their own schedule"),
+    Rule(Role.PRACTITIONER, ResourceType.SLOT, Action.UPDATE, OWN,
+         "a practitioner may close or change slots in their own schedule"),
 )
 
 

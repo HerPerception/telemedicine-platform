@@ -52,6 +52,10 @@ class Appointment:
     starts_at: datetime
     ends_at: datetime
     status: str = "booked"
+    # The slot this appointment occupies. Added by ENG-003 (booking): the
+    # `appointment.slot_id` column of ENG-001's schema requires it, and the
+    # booking service needs it to free a slot on reschedule or cancellation.
+    slot_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
