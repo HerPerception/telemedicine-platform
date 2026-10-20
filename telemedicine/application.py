@@ -68,14 +68,36 @@ class Application:
             raise RuntimeError("there is no database to apply the schema to")
         return self.database.apply_schema()
 
+    def check(self) -> None:
+        """Check that the application is ready to serve.
+
+        A deployment that believes it has a database and does not is worse
+        than one that refuses to start, so the check happens before the
+        server does.
+        """
+        if self.database is None:
+            return
+        self.database.check_connection()
+        missing = self.database.missing_tables()
+        if missing:
+            raise RuntimeError(
+                "the schema has not been applied: the tables "
+                f"{', '.join(missing)} are missing. Run "
+                "scripts/apply_schema.py first.")
+
 
 def build_application(settings: Optional[Settings] = None,
-                      clock=None) -> Application:
+                      clock=None, verify: bool = True) -> Application:
     """Assemble the application from the settings.
 
     With a database in the settings, every store is the database one. Without
     one, they are the in-memory ones and the application keeps its records in
     the memory of the process.
+
+    When a database is configured, it is checked before the application is
+    handed back, unless ``verify`` is turned off. Starting an application
+    that believes it has a database and does not would put the records of one
+    request in memory and the records of the next in the database.
     """
     settings = settings if settings is not None else Settings.from_environment()
     database = Database(settings.database_url) if settings.has_database else None
@@ -111,7 +133,7 @@ def build_application(settings: Optional[Settings] = None,
     fhir = FhirApplication(FhirRepository(records, booking, prescriptions), auth)
     video_api = VideoApplication(video, auth)
 
-    return Application(
+    application = Application(
         settings=settings,
         database=database,
         audit=audit,
@@ -124,3 +146,6 @@ def build_application(settings: Optional[Settings] = None,
         fhir=fhir,
         video_api=video_api,
     )
+    if verify and database is not None:
+        application.check()
+    return application

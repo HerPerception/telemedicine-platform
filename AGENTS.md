@@ -48,10 +48,22 @@ exists; check the repository before assuming anything.
 | `scripts/apply_schema.py` | Applies the database schema, and says what it skipped |
 | `scripts/run_server.py` | Runs the application: the FHIR API and the video rooms |
 
+## Installing
+
+The application code uses only the Python 3 standard library, and the project has **one**
+dependency: the PostgreSQL driver. It is only needed to run against a database; the tests that do
+not need one run without it.
+
+```bash
+pip install -e .            # or: pip install 'psycopg[binary]'
+```
+
+A deployment needs the driver, and the application says so if it is missing.
+
 ## Verified commands
 
-Run from the repository root. Everything uses only the Python 3 standard library; there is nothing to
-install.
+Run from the repository root. The suite runs without anything installed — the persistence tests are
+skipped when there is no database — and with the driver and a server, every test runs.
 
 ```bash
 # Validate the example FHIR resources against the declared mapping
@@ -64,7 +76,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (393 tests, 44 of them skipped without a database).
+Expected result of the test command: `OK` (398 tests, 45 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 

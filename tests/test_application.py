@@ -74,7 +74,9 @@ class WiringTest(unittest.TestCase):
         database = _fresh_database("telemedicine_wiring_test")
         if database is None:
             self.skipTest("no PostgreSQL: set TELEMEDICINE_TEST_DSN")
-        application = build_application(Settings(database_url=_dsn()))
+
+        # The database this test made, which has the schema applied to it.
+        application = build_application(Settings(database_url=database.dsn))
         self.assertIsInstance(application.audit, PostgresAuditLog)
         self.assertIsInstance(application.records.repository, PostgresClinicalRepository)
         self.assertIsInstance(application.auth.lockout, PostgresLockoutStore)
@@ -98,7 +100,8 @@ class EndToEndTest(unittest.TestCase):
         from telemedicine.config import Settings
         from telemedicine.fhir.server import make_server
 
-        self.application = build_application(Settings(database_url=_dsn()))
+        # The database this test made, which has the schema applied to it.
+        self.application = build_application(Settings(database_url=self.database.dsn))
         self.server = make_server(self.application.http, "127.0.0.1", 0)
         self.port = self.server.server_address[1]
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)

@@ -56,14 +56,17 @@ jobs:
       - name: Install the PostgreSQL driver
         run: python3 -m pip install --quiet "psycopg[binary]>=3.1,<4"
 
+      - name: Apply the schema to the service database
+        # Before the suite: the application refuses to start without the
+        # schema, and the end-to-end test builds the application the way a
+        # deployment does.
+        run: python3 scripts/apply_schema.py "$TELEMEDICINE_TEST_DSN"
+
       - name: Run the test suite
         run: python3 -m unittest discover -s tests -v
 
       - name: Validate the FHIR examples against the declared mapping
         run: python3 scripts/validate_fhir_examples.py
-
-      - name: Apply the schema to a clean database
-        run: python3 scripts/apply_schema.py "$TELEMEDICINE_TEST_DSN"
 
   # A second job so that a failure is visible in the checks list next to
   # the suite rather than inside its log.

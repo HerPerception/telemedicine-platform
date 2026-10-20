@@ -258,6 +258,14 @@ then does what a patient does — register, sign in, book a slot the clinician
 opened, read the booking back through the FHIR API, and be refused when they
 ask for somebody else's.
 
+**The application refuses to start rather than start wrongly.** When a
+connection string is configured, the database is checked before the server
+listens: the driver has to be installed, the database has to be reachable, and
+the schema has to have been applied. A deployment that believes it has a
+database and does not would put the records of one request in memory and the
+records of the next in the database, which is the kind of fault that is
+discovered by a patient rather than by a monitor.
+
 ## 8. Known gaps
 
 1. **A deployment still needs a few things this project does not have.** The application is

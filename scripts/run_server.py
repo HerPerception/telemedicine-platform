@@ -31,14 +31,23 @@ from telemedicine.fhir.server import make_server  # noqa: E402
 
 def main(argv=None) -> int:
     settings = Settings.from_environment()
-    application = build_application(settings)
 
+    try:
+        application = build_application(settings)
+    except Exception as error:
+        # The message is the whole point: a missing driver or an unreachable
+        # database has to say what to do about it.
+        print(f"telemedicine: {error}", file=sys.stderr)
+        return 1
+
+    # The messages are flushed, so that they are not lost when the output
+    # is a pipe and the process is stopped.
     if not settings.has_database:
         print("WARNING: no database is configured, so the records of this process")
         print("         are in its memory and are lost when it stops. Set")
-        print("         TELEMEDICINE_DATABASE_URL for anything but a demo.")
-    print(f"telemedicine: {settings.describe()}")
-    print(f"telemedicine: FHIR R4 API under /fhir, video rooms under /video")
+        print("         TELEMEDICINE_DATABASE_URL for anything but a demo.", flush=True)
+    print(f"telemedicine: {settings.describe()}", flush=True)
+    print("telemedicine: FHIR R4 API under /fhir, video rooms under /video", flush=True)
 
     server = make_server(application.http, settings.host, settings.port)
     try:
