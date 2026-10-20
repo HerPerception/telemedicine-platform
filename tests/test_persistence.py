@@ -291,7 +291,12 @@ class SharedLockoutTest(DatabaseTestCase):
         service.register("ada@example.org", "a-long-passphrase", Role.PATIENT,
                          record_id="patient-1")
 
-        for _ in range(5):
+        # The policy of ENG-013: an address is blocked after five failures,
+        # and the account is locked only when the failures are spread over
+        # many addresses. Without an address, the account counter is the only
+        # one, and it takes ACCOUNT_THRESHOLD of them.
+        from telemedicine.auth import ACCOUNT_THRESHOLD
+        for _ in range(ACCOUNT_THRESHOLD):
             with self.assertRaises(AuthenticationError):
                 service.authenticate("ada@example.org", "not-the-passphrase")
 
@@ -311,9 +316,9 @@ class SharedLockoutTest(DatabaseTestCase):
         for _ in range(3):
             with self.assertRaises(AuthenticationError):
                 service.authenticate("ada@example.org", "not-the-passphrase")
-        self.assertEqual(self.store.attempts("ada@example.org"), 3)
+        self.assertEqual(self.store.attempts("account:ada@example.org"), 3)
         service.authenticate("ada@example.org", "a-long-passphrase")
-        self.assertEqual(self.store.attempts("ada@example.org"), 0)
+        self.assertEqual(self.store.attempts("account:ada@example.org"), 0)
 
     def test_the_lock_is_audited(self):
         from telemedicine.auth import AuthService
@@ -324,7 +329,8 @@ class SharedLockoutTest(DatabaseTestCase):
         service = AuthService(audit=audit, lockout=self.store, password_iterations=1000)
         service.register("ada@example.org", "a-long-passphrase", Role.PATIENT,
                          record_id="patient-1")
-        for _ in range(5):
+        from telemedicine.auth import ACCOUNT_THRESHOLD
+        for _ in range(ACCOUNT_THRESHOLD):
             with self.assertRaises(AuthenticationError):
                 service.authenticate("ada@example.org", "not-the-passphrase")
         with self.assertRaises(AuthenticationError):

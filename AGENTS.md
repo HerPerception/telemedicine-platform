@@ -47,6 +47,7 @@ exists; check the repository before assuming anything.
 | `telemedicine/persistence/` | The database, the durable audit log, the shared lockout, the accounts, the sessions, the prescription documents, the clinical records and the notification outbox |
 | `telemedicine/notifications.py` | The notification outbox: what the practice tells people, and when |
 | `telemedicine/audit_anchor.py` | Publishing the head of the audit chain outside the database |
+| `telemedicine/session_api.py` | Signing in and out over HTTP, and the address the request came from |
 | `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
 | `telemedicine/config.py`, `telemedicine/application.py` | The settings, and the application assembled from them |
 | `scripts/apply_schema.py` | Applies the database schema, and says what it skipped |
@@ -81,7 +82,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (425 tests, 48 of them skipped without a database).
+Expected result of the test command: `OK` (444 tests, 48 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
@@ -151,6 +152,8 @@ path rather than a guess.
 - The head of the audit chain is published outside the database when
   `TELEMEDICINE_AUDIT_ANCHOR` is set, so that a chain rewritten from the beginning can be told
   apart from an untouched one.
+- A caller signs in with `POST /fhir/session` (or `/video/session`) and signs out with `DELETE` on
+  the same path. The lockout counts the address the request came from as well as the account.
 - `docs/reviews/compliance-review.md` holds the open findings and the conditions for using real
   patient data. Nothing in this repository may handle a real patient until those conditions are met.
 

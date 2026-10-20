@@ -35,6 +35,7 @@ from telemedicine.errors import (
     ValidationError,
 )
 from telemedicine.fhir.server import Response
+from telemedicine.session_api import SessionEndpoints
 from telemedicine.video import JoinUnavailable, VideoService
 
 CONTENT_TYPE = "application/json; charset=utf-8"
@@ -43,10 +44,13 @@ CONTENT_TYPE = "application/json; charset=utf-8"
 class VideoApplication:
     """Routes a request to the video service and builds the response."""
 
-    def __init__(self, service: VideoService, auth: AuthService, base_path: str = "/video"):
+    def __init__(self, service: VideoService, auth: AuthService, base_path: str = "/video",
+                 trust_forwarded_for: bool = False):
         self.service = service
         self.auth = auth
         self.base_path = base_path.rstrip("/")
+        # Signing in and out, and the address the request came from.
+        self.sessions = SessionEndpoints(auth, trust_forwarded_for=trust_forwarded_for)
 
     # -- the entry point ---------------------------------------------------
 
@@ -79,9 +83,19 @@ class VideoApplication:
         remainder = path[len(self.base_path):].strip("/")
         segments = [segment for segment in remainder.split("/") if segment]
 
+        # The session endpoints come before the authentication: signing in is
+        # how a caller gets the token in the first place.
+        if not segments or segments[0] == "session":
+            if method == "POST":
+                return self._json(201, self.sessions.sign_in(headers, body))
+            if method == "DELETE":
+                self.sessions.sign_out(headers)
+                return Response(status=204, body=b"", headers={})
+            return self._method_not_allowed(method)
+
         actor = self._authenticate(headers)
 
-        if not segments or segments[0] != "rooms":
+        if segments[0] != "rooms":
             return self._error(404, "not_found", f"no endpoint at '{path}'")
 
         if len(segments) == 1:
