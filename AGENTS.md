@@ -41,8 +41,11 @@ exists; check the repository before assuming anything.
 | `multi-agent-orchestrator/` | Agent coordination bookkeeping — **not** product code. Do not edit it as part of a feature. |
 | `docs/persistence-design.md` | The database: the schema, the durable audit log, the shared lockout and the dependency |
 | `docs/reviews/remediation-status.md` | Whether each finding of the compliance review is closed |
+| `docs/notification-design.md` | The notification outbox: the confirmations, the transport and the retry |
 | `db/security_schema.sql` | PostgreSQL DDL for the shared lockout counter (ENG-007) |
-| `telemedicine/persistence/` | The database, the durable audit log, the shared lockout, the accounts, the sessions, the prescription documents and the clinical records |
+| `db/notification_schema.sql` | PostgreSQL DDL for the notification outbox (ENG-011) |
+| `telemedicine/persistence/` | The database, the durable audit log, the shared lockout, the accounts, the sessions, the prescription documents, the clinical records and the notification outbox |
+| `telemedicine/notifications.py` | The notification outbox: what the practice tells people, and when |
 | `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
 | `telemedicine/config.py`, `telemedicine/application.py` | The settings, and the application assembled from them |
 | `scripts/apply_schema.py` | Applies the database schema, and says what it skipped |
@@ -76,7 +79,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (398 tests, 45 of them skipped without a database).
+Expected result of the test command: `OK` (413 tests, 47 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
@@ -141,6 +144,8 @@ path rather than a guess.
   authorized and audited in one place.
 - The services hold no records: they ask a repository, and the repository is either the memory of
   one process or the database. A deployment passes the database one.
+- A message that is owed is queued in the database before it is sent, and something that is not an
+  account has no actor id in the audit log.
 - `docs/reviews/compliance-review.md` holds the open findings and the conditions for using real
   patient data. Nothing in this repository may handle a real patient until those conditions are met.
 

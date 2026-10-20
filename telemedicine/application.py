@@ -35,6 +35,8 @@ from telemedicine.persistence.clinical_store import PostgresClinicalRepository
 from telemedicine.persistence.database import Database
 from telemedicine.persistence.document_store import PostgresDocumentStore
 from telemedicine.persistence.lockout import InMemoryLockoutStore, PostgresLockoutStore
+from telemedicine.persistence.notification_store import PostgresNotificationStore
+from telemedicine.notifications import NotificationService
 from telemedicine.prescriptions import PrescriptionService
 from telemedicine.records import RecordsService
 from telemedicine.video import VideoService
@@ -53,6 +55,7 @@ class Application:
     slots: SlotService
     booking: BookingService
     prescriptions: PrescriptionService
+    notifications: NotificationService
     video: VideoService
     fhir: FhirApplication
     video_api: VideoApplication
@@ -114,6 +117,7 @@ def build_application(settings: Optional[Settings] = None,
         documents = PostgresDocumentStore(database)
         clinical = PostgresClinicalRepository(database)
         slot_store = clinical
+        notification_store = PostgresNotificationStore(database)
     else:
         audit = AuditLog(clock=clock) if clock is not None else AuditLog()
         lockout = InMemoryLockoutStore()
@@ -122,12 +126,17 @@ def build_application(settings: Optional[Settings] = None,
         documents = None
         clinical = None
         slot_store = None
+        notification_store = None
+
+    notifications = NotificationService(store=notification_store, audit=audit)
 
     auth = AuthService(users=users, audit=audit, sessions=sessions, lockout=lockout)
     records = RecordsService(audit=audit, repository=clinical)
     slots = SlotService(audit=audit, repository=slot_store)
-    booking = BookingService(slots, audit=audit, records=records, accounts=auth.users)
-    prescriptions = PrescriptionService(records, documents=documents, audit=audit)
+    booking = BookingService(slots, audit=audit, records=records, accounts=auth.users,
+                             notifications=notifications)
+    prescriptions = PrescriptionService(records, documents=documents, audit=audit,
+                                        notifications=notifications)
     video = VideoService(records, audit=audit)
 
     fhir = FhirApplication(FhirRepository(records, booking, prescriptions), auth)
@@ -142,6 +151,7 @@ def build_application(settings: Optional[Settings] = None,
         slots=slots,
         booking=booking,
         prescriptions=prescriptions,
+        notifications=notifications,
         video=video,
         fhir=fhir,
         video_api=video_api,

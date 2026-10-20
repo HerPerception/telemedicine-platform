@@ -31,7 +31,7 @@ from typing import Dict, Iterator, List, Optional, Sequence
 EXPECTED_TABLES = (
     "patient", "practitioner", "schedule_slot", "appointment", "encounter",
     "medication_request", "user_account", "auth_session", "audit_log",
-    "prescription_document", "auth_lockout",
+    "prescription_document", "auth_lockout", "notification_outbox",
 )
 
 SCHEMA_FILES = (
@@ -39,6 +39,7 @@ SCHEMA_FILES = (
     "auth_schema.sql",
     "prescription_schema.sql",
     "security_schema.sql",
+    "notification_schema.sql",
 )
 
 # The advisory lock key of the audit chain. Every writer of an audit entry

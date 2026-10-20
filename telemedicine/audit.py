@@ -52,9 +52,9 @@ class AuditEntry:
 
     sequence: int
     occurred_at: str
-    # The account the action was performed by. It is None when the account is
-    # not known — a login for an address that has no account, for instance —
-    # which is not the same as an id.
+    # The account the action was performed by. It is None when the action
+    # was not performed by an account at all — a system action, or a login
+    # for an address that has no account — which is not the same as an id.
     actor_user_id: Optional[str]
     actor_role: str
     action: str
