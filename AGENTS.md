@@ -44,6 +44,7 @@ exists; check the repository before assuming anything.
 | `docs/reviews/remediation-status.md` | Whether each finding of the compliance review is closed |
 | `docs/compliance/nigeria.md` | The answers for the jurisdiction: the law, the decisions, and what is still to be settled |
 | `docs/consent-design.md` | The consent record and the endpoints that reach it |
+| `docs/retention-design.md` | The retention policy, what is past its period, and how a record is removed |
 | `docs/compliance/privacy-notice-draft.md` | The draft privacy notice, and the four optional-use consents |
 | `docs/deployment.md` | The runbook: what a deployment is, what it needs, and how to bring it up |
 | `docs/notification-design.md` | The notification outbox: the confirmations, the transport and the retry |
@@ -57,6 +58,8 @@ exists; check the repository before assuming anything.
 | `telemedicine/consent.py` | The consent record: what a patient agreed to, and what they withdrew |
 | `telemedicine/consent_api.py` | The consent endpoints: a patient grants and withdraws, a clinician reads |
 | `telemedicine/medications.py` | The Nigerian dispensing identity of a medicine: the brand, the NAFDAC number, and the example list |
+| `telemedicine/retention.py` | The retention policy, what is past its period, and how a record is removed |
+| `config/retention_policy.yaml` | The retention policy: the periods, and the two flags that stop anything being deleted |
 | `db/consent_schema.sql` | PostgreSQL DDL for the consent record — append-only, like the audit log |
 | `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
 | `telemedicine/config.py`, `telemedicine/application.py` | The settings, and the application assembled from them |
@@ -66,6 +69,17 @@ exists; check the repository before assuming anything.
 | `scripts/run_delivery.py` | Sends the queued notifications |
 | `scripts/healthcheck.py` | Whether the application is ready to serve |
 | `scripts/report_breach.py` | Assembles the section 40(2) breach report from the audit log |
+| `scripts/retention.py` | The retention job: `check` reports what is past its period, `delete` removes it |
+
+## Retention
+
+**Nothing is deleted.** The policy is in `config/retention_policy.yaml`, and it carries two flags,
+`enabled` and `legal_advisor_signed`. Both are false, and the job refuses to remove anything until
+both are true. The numbers in the file are **conventional practice, not law**: they are placeholders
+until the practice's adviser confirms them, and the file says so at the top.
+
+The privacy notice's "How long we keep data" table is generated from that file, so the notice and
+the job cannot drift apart.
 
 ## The jurisdiction
 
@@ -108,7 +122,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (541 tests, 57 of them skipped without a database).
+Expected result of the test command: `OK` (658 tests, 68 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 

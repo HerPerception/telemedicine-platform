@@ -113,7 +113,10 @@ class PrivacyNoticeDraftTest(unittest.TestCase):
 
     def test_it_states_the_retention_periods(self):
         self.assertIn("How long we keep your data", self.text)
-        self.assertIn("to be confirmed", self.text)
+        # The periods are placeholders until an adviser confirms them, and
+        # the table says so where a patient would read it.
+        self.assertIn("not yet confirmed by an adviser", self.text)
+        self.assertIn("DRAFT - pending legal advisor", self.text)
 
     def test_it_says_nothing_is_deleted_until_the_periods_are_confirmed(self):
         self.assertIn("nothing is deleted", self.text.lower())

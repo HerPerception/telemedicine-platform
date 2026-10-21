@@ -22,7 +22,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, NamedTuple, Optional, Tuple, Union
 
 from telemedicine.audit import OUTCOME_DENIED, OUTCOME_ERROR, OUTCOME_SUCCESS, AuditLog
 from telemedicine.authorization import Action, ResourceType
@@ -171,6 +171,18 @@ def render_pdf(lines: List[Union[str, PdfLine]]) -> bytes:
     return bytes(out)
 
 
+class DocumentMetadata(NamedTuple):
+    """What the retention job needs to know about a document.
+
+    Not the bytes: the job looks at thousands of documents and needs the
+    moment each was created, not the PDF.
+    """
+
+    document_id: str
+    medication_request_id: str
+    created_at: datetime
+
+
 @dataclass(frozen=True)
 class PrescriptionDocument:
     """The downloadable document of a prescription."""
@@ -215,6 +227,17 @@ class DocumentStore:
     def get_for_request(self, medication_request_id: str) -> Optional[PrescriptionDocument]:
         document_id = self._by_request.get(medication_request_id)
         return self._documents.get(document_id) if document_id else None
+
+    def all_metadata(self) -> List[DocumentMetadata]:
+        """Every document, without its bytes.
+
+        The retention job needs to see them all, to find the ones that are
+        past their period.
+        """
+        return [DocumentMetadata(document.document_id,
+                                 document.medication_request_id,
+                                 document.created_at)
+                for document in self._documents.values()]
 
     def __len__(self) -> int:
         return len(self._documents)

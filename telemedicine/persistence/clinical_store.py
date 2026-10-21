@@ -102,7 +102,7 @@ class PostgresClinicalRepository:
             "SELECT id, mrn, family_name, given_names, birth_date, gender, phone, email,"
             " address_line1, address_line2, address_city, address_region,"
             " address_postal_code, address_country, account_ref, created_at"
-            " FROM patient WHERE id = %s", (patient_id,))
+            " FROM patient WHERE id = %s AND deleted_at IS NULL", (patient_id,))
         return _to_patient(rows[0]) if rows else None
 
     def list_patients(self) -> List[PatientRecord]:
@@ -110,7 +110,7 @@ class PostgresClinicalRepository:
             "SELECT id, mrn, family_name, given_names, birth_date, gender, phone, email,"
             " address_line1, address_line2, address_city, address_region,"
             " address_postal_code, address_country, account_ref, created_at"
-            " FROM patient ORDER BY id")
+            " FROM patient WHERE deleted_at IS NULL ORDER BY id")
         return [_to_patient(row) for row in rows]
 
     # -- practitioners -----------------------------------------------------
@@ -190,7 +190,7 @@ class PostgresClinicalRepository:
         return appointment
 
     def get_appointment(self, appointment_id: str) -> Optional[Appointment]:
-        rows = self._query(_APPOINTMENT_SELECT + " WHERE a.id = %s", (appointment_id,))
+        rows = self._query(_APPOINTMENT_SELECT + " AND a.id = %s", (appointment_id,))
         return _to_appointment(rows[0]) if rows else None
 
     def list_appointments(self) -> List[Appointment]:
@@ -199,7 +199,7 @@ class PostgresClinicalRepository:
 
     def appointment_for_slot(self, slot_id: str) -> Optional[Appointment]:
         rows = self._query(
-            _APPOINTMENT_SELECT + " WHERE a.slot_id = %s AND a.status <> 'cancelled' LIMIT 1",
+            _APPOINTMENT_SELECT + " AND a.slot_id = %s AND a.status <> 'cancelled' LIMIT 1",
             (slot_id,))
         return _to_appointment(rows[0]) if rows else None
 
@@ -228,7 +228,7 @@ class PostgresClinicalRepository:
         return encounter
 
     def get_encounter(self, encounter_id: str) -> Optional[Encounter]:
-        rows = self._query(_ENCOUNTER_SELECT + " WHERE e.id = %s", (encounter_id,))
+        rows = self._query(_ENCOUNTER_SELECT + " AND e.id = %s", (encounter_id,))
         return _to_encounter(rows[0]) if rows else None
 
     def list_encounters(self) -> List[Encounter]:
@@ -237,7 +237,7 @@ class PostgresClinicalRepository:
 
     def encounter_for_appointment(self, appointment_id: str) -> Optional[Encounter]:
         rows = self._query(
-            _ENCOUNTER_SELECT + " WHERE e.appointment_id = %s LIMIT 1", (appointment_id,))
+            _ENCOUNTER_SELECT + " AND e.appointment_id = %s LIMIT 1", (appointment_id,))
         return _to_encounter(rows[0]) if rows else None
 
     # -- prescriptions -----------------------------------------------------
@@ -279,7 +279,7 @@ class PostgresClinicalRepository:
         return prescription
 
     def get_prescription(self, prescription_id: str) -> Optional[Prescription]:
-        rows = self._query(_PRESCRIPTION_SELECT + " WHERE m.id = %s", (prescription_id,))
+        rows = self._query(_PRESCRIPTION_SELECT + " AND m.id = %s", (prescription_id,))
         return _to_prescription(rows[0]) if rows else None
 
     def list_prescriptions(self) -> List[Prescription]:
@@ -288,8 +288,53 @@ class PostgresClinicalRepository:
 
     def prescriptions_for_encounter(self, encounter_id: str) -> List[Prescription]:
         rows = self._query(
-            _PRESCRIPTION_SELECT + " WHERE m.encounter_id = %s ORDER BY m.id", (encounter_id,))
+            _PRESCRIPTION_SELECT + " AND m.encounter_id = %s ORDER BY m.id", (encounter_id,))
         return [_to_prescription(row) for row in rows]
+
+    # -- the retention job (ENG-017) ---------------------------------------
+
+    def mark_deleted(self, record_type: str, record_id: str, deleted_at) -> int:
+        """Mark a record and everything that belongs to it as deleted.
+
+        A clinical record is the patient and their encounters, prescriptions
+        and appointments together: a record is not removed in pieces.
+        """
+        if record_type != "clinical_record":
+            return 0
+        marked = 0
+        for table, column in (("patient", "id"), ("encounter", "patient_id"),
+                               ("medication_request", "patient_id"),
+                               ("appointment", "patient_id")):
+            with self.database.transaction() as cursor:
+                cursor.execute(
+                    f"UPDATE {table} SET deleted_at = %s, updated_at = %s"
+                    f" WHERE {column} = %s AND deleted_at IS NULL",
+                    (deleted_at, deleted_at, record_id))
+                marked += cursor.rowcount
+        return marked
+
+    def purge_deleted(self, record_type: str, record_id: str) -> int:
+        """Remove a record that has been in the trash long enough.
+
+        The order matters, because the rows refer to one another: a
+        prescription refers to an encounter, an encounter refers to an
+        appointment, and all of them refer to the patient. They go in the
+        reverse of that order, and the patient goes last.
+        """
+        if record_type != "clinical_record":
+            return 0
+        removed = 0
+        for table in ("medication_request", "encounter", "appointment"):
+            with self.database.transaction() as cursor:
+                cursor.execute(
+                    f"DELETE FROM {table} WHERE patient_id = %s AND deleted_at IS NOT NULL",
+                    (record_id,))
+                removed += cursor.rowcount
+        with self.database.transaction() as cursor:
+            cursor.execute("DELETE FROM patient WHERE id = %s AND deleted_at IS NOT NULL",
+                           (record_id,))
+            removed += cursor.rowcount
+        return removed
 
     # -- slots -------------------------------------------------------------
 
@@ -340,7 +385,9 @@ _APPOINTMENT_SELECT = (
     " p.account_ref, pr.account_ref"
     " FROM appointment a"
     " JOIN patient p ON p.id = a.patient_id"
-    " JOIN practitioner pr ON pr.id = a.practitioner_id")
+    " JOIN practitioner pr ON pr.id = a.practitioner_id"
+    # ENG-017: a soft-deleted record is not served.
+    " WHERE a.deleted_at IS NULL AND p.deleted_at IS NULL")
 
 _ENCOUNTER_SELECT = (
     "SELECT e.id, e.appointment_id, e.patient_id, e.practitioner_id, e.status, e.started_at,"
@@ -348,7 +395,9 @@ _ENCOUNTER_SELECT = (
     " p.account_ref, pr.account_ref"
     " FROM encounter e"
     " JOIN patient p ON p.id = e.patient_id"
-    " JOIN practitioner pr ON pr.id = e.practitioner_id")
+    " JOIN practitioner pr ON pr.id = e.practitioner_id"
+    # ENG-017: a soft-deleted record is not served.
+    " WHERE e.deleted_at IS NULL AND p.deleted_at IS NULL")
 
 _PRESCRIPTION_SELECT = (
     "SELECT m.id, m.encounter_id, m.patient_id, m.prescriber_id, m.medication_system,"
@@ -358,7 +407,9 @@ _PRESCRIPTION_SELECT = (
     " p.account_ref, pr.account_ref"
     " FROM medication_request m"
     " JOIN patient p ON p.id = m.patient_id"
-    " JOIN practitioner pr ON pr.id = m.prescriber_id")
+    " JOIN practitioner pr ON pr.id = m.prescriber_id"
+    # ENG-017: a soft-deleted record is not served.
+    " WHERE m.deleted_at IS NULL AND p.deleted_at IS NULL")
 
 _SLOT_SELECT = (
     "SELECT s.id, s.practitioner_id, s.starts_at, s.ends_at, s.timezone, s.status,"

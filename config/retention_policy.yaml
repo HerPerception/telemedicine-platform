@@ -1,0 +1,51 @@
+# The retention policy — how long records are kept, and when they go.
+#
+# TODO_LEGAL - these are TEMPORARY placeholders until lawyer/MDCN advisor confirms
+# Source: conventional practice 5y outpatient, 7y inpatient, 6-9y general, 21y for children
+#
+# **Nothing is deleted while this file says what it says.**
+#
+# Two flags have to be true before this program will remove a single record:
+#
+#   enabled: false            the policy is in force at all
+#   legal_advisor_signed: false    a qualified adviser has confirmed the numbers
+#
+# Both are false, and the program refuses to delete while either is false. The
+# first one turned on without the second is the state the program refuses
+# outright: "Refusing to delete: legal sign-off required".
+#
+# The numbers below are **conventional practice, not law**. They are here so
+# that the machinery can be built and tested while the practice waits for an
+# adviser. When the adviser gives the real numbers, they go in this file, the
+# adviser's sign-off is recorded here, and the privacy notice's table is
+# regenerated from it.
+#
+# The keys are read by `telemedicine/retention.py`, which reads them strictly:
+# an unknown key, a missing key or a value of the wrong type is an error, not
+# something quietly ignored.
+
+# How long a patient's clinical record is kept after their last visit.
+#   adult_outpatient_years: the general rule for an adult's outpatient record
+#   adult_inpatient_years:  for an inpatient record, if the practice has any
+adult_outpatient_years: 5
+adult_inpatient_years: 7
+
+# A record made while the patient was a child is kept until they reach this
+# age. The period is measured from their last visit, not from their birth.
+child_until_age: 21
+
+# How long the prescription documents are kept.
+prescription_years: 10
+
+# How long the audit trail is kept.
+#
+# The audit trail is a hash chain: every entry links to the one before it, and
+# the head of the chain is published outside the database. It therefore cannot
+# be pruned without breaking the chain, and this program reports the entries
+# that are past this period but refuses to remove them. The number is kept
+# here for the day a chain-preserving method exists.
+audit_log_years: 7
+
+# The two flags. Neither is true.
+enabled: false
+legal_advisor_signed: false

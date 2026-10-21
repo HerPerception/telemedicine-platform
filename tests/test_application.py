@@ -25,6 +25,17 @@ from tests.test_persistence import _fresh_database
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
 
 
+# A moment in the future, in the practice's own local time.
+#
+# A slot in the past cannot be booked, so a test that books one must not
+# use a fixed date: the wall clock moves, and a suite that stops passing at
+# a particular hour is a suite that fails in the continuous integration.
+def tomorrow_at(hour: int, minute: int = 0):
+    from datetime import datetime, timedelta
+    moment = datetime.now() + timedelta(days=1)
+    return moment.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
 class SettingsTest(unittest.TestCase):
     def test_the_settings_come_from_the_environment(self):
         from telemedicine.config import Settings
@@ -171,7 +182,7 @@ class EndToEndTest(unittest.TestCase):
         slot = self.application.slots.create_slot(
             self.application.auth.users.get_by_email(f"dr-{practitioner_id[:8]}@example.org"),
             practitioner_id=practitioner_id,
-            local_start=dt(2026, 10, 21, 16, 0), local_end=dt(2026, 10, 21, 16, 30),
+            local_start=tomorrow_at(16), local_end=tomorrow_at(16, 30),
             timezone_name="Europe/Berlin")
 
         # The patient books it, through the FHIR API.
@@ -195,7 +206,9 @@ class EndToEndTest(unittest.TestCase):
                                     patient_token)
         self.assertEqual(status, 200)
         self.assertEqual(read["id"], created["id"])
-        self.assertEqual(read["start"], "2026-10-21T14:00:00Z")
+        # The start is the slot's own moment, in UTC: the slot was created
+        # in the practitioner's local time, and the API says the instant.
+        self.assertEqual(read["start"], slot.starts_at.isoformat().replace("+00:00", "Z"))
         self.assertEqual(read["minutesDuration"], 30)
 
         # And it is in the database, not in the memory of the process.
@@ -226,7 +239,7 @@ class EndToEndTest(unittest.TestCase):
         slot = self.application.slots.create_slot(
             self.application.auth.users.get_by_email(f"dr-{practitioner_id[:8]}@example.org"),
             practitioner_id=practitioner_id,
-            local_start=dt(2026, 10, 21, 16, 0), local_end=dt(2026, 10, 21, 16, 30),
+            local_start=tomorrow_at(16), local_end=tomorrow_at(16, 30),
             timezone_name="Europe/Berlin")
         appointment = self.application.booking.book(
             self.application.auth.users.get_by_email(f"ada-{patient_id[:8]}@example.org"), slot.slot_id)

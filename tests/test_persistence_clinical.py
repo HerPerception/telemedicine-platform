@@ -24,6 +24,17 @@ from tests.test_persistence import _fresh_database
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
 
 
+# A moment in the future, in the practice's own local time.
+#
+# A slot in the past cannot be booked, so a test that books one must not
+# use a fixed date: the wall clock moves, and a suite that stops passing at
+# a particular hour is a suite that fails in the continuous integration.
+def tomorrow_at(hour: int, minute: int = 0):
+    from datetime import datetime, timedelta
+    moment = datetime.now() + timedelta(days=1)
+    return moment.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
 class ClinicalTestCase(unittest.TestCase):
     """A database of its own for every test."""
 
@@ -153,8 +164,8 @@ class TreatmentRelationshipTest(ClinicalTestCase):
                                  audit=records.audit)
         slot = slots.create_slot(
             practitioner_account, practitioner_id=practitioner.practitioner_id,
-            local_start=datetime(2026, 10, 21, 14, 0),
-            local_end=datetime(2026, 10, 21, 14, 30), timezone_name="Europe/Berlin")
+            local_start=tomorrow_at(14),
+            local_end=tomorrow_at(14, 30), timezone_name="Europe/Berlin")
         appointment = booking.book(patient_account, slot.slot_id)
         return records, booking, patient, practitioner, patient_account, slot, appointment
 
@@ -210,8 +221,8 @@ class PrescriptionTest(ClinicalTestCase):
         slot = slots.create_slot(
             practitioner_account,
             practitioner_id=practitioner_id,
-            local_start=datetime(2026, 10, 21, 14, 0),
-            local_end=datetime(2026, 10, 21, 14, 30), timezone_name="Europe/Berlin")
+            local_start=tomorrow_at(14),
+            local_end=tomorrow_at(14, 30), timezone_name="Europe/Berlin")
         appointment = booking.book(patient_account, slot.slot_id)
         encounter = records.create_encounter(
             practitioner_account, appointment.appointment_id,
@@ -299,8 +310,8 @@ class DoubleBookingTest(ClinicalTestCase):
             self._services()
         slot = slots.create_slot(
             practitioner_account, practitioner_id=practitioner.practitioner_id,
-            local_start=datetime(2026, 10, 21, 14, 0),
-            local_end=datetime(2026, 10, 21, 14, 30), timezone_name="Europe/Berlin")
+            local_start=tomorrow_at(14),
+            local_end=tomorrow_at(14, 30), timezone_name="Europe/Berlin")
         booking.book(patient_account, slot.slot_id)
 
         # A second instance, with its own services, over the same database.
@@ -318,8 +329,8 @@ class DoubleBookingTest(ClinicalTestCase):
             self._services()
         slot = slots.create_slot(
             practitioner_account, practitioner_id=practitioner.practitioner_id,
-            local_start=datetime(2026, 10, 21, 14, 0),
-            local_end=datetime(2026, 10, 21, 14, 30), timezone_name="Europe/Berlin")
+            local_start=tomorrow_at(14),
+            local_end=tomorrow_at(14, 30), timezone_name="Europe/Berlin")
 
         outcomes = []
 
@@ -349,8 +360,8 @@ class DoubleBookingTest(ClinicalTestCase):
             self._services()
         slot = slots.create_slot(
             practitioner_account, practitioner_id=practitioner.practitioner_id,
-            local_start=datetime(2026, 10, 21, 14, 0),
-            local_end=datetime(2026, 10, 21, 14, 30), timezone_name="Europe/Berlin")
+            local_start=tomorrow_at(14),
+            local_end=tomorrow_at(14, 30), timezone_name="Europe/Berlin")
         appointment = booking.book(patient_account, slot.slot_id)
         booking.cancel(patient_account, appointment.appointment_id, reason="cannot make it")
 

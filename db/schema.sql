@@ -55,6 +55,11 @@ CREATE TABLE IF NOT EXISTS patient (
     account_ref         text,
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
+    -- ENG-017: when the record was soft-deleted. NULL is a live record.
+    -- A soft-deleted record is kept whole in the trash table for thirty
+    -- days before it is removed for good, and nothing is removed at all
+    -- while the retention policy says it may not be.
+    deleted_at          timestamptz,
     CONSTRAINT patient_birth_date_not_future
         CHECK (birth_date IS NULL OR birth_date <= current_date)
 );
@@ -164,6 +169,11 @@ CREATE TABLE IF NOT EXISTS appointment (
     updated_at          timestamptz NOT NULL DEFAULT now(),
     -- The booked slot, the practitioner and the appointment window must all
     -- agree. A composite foreign key enforces this in the database.
+    -- ENG-017: when the record was soft-deleted. NULL is a live record.
+    -- A soft-deleted record is kept whole in the trash table for thirty
+    -- days before it is removed for good, and nothing is removed at all
+    -- while the retention policy says it may not be.
+    deleted_at          timestamptz,
     CONSTRAINT appointment_slot_match
         FOREIGN KEY (slot_id, practitioner_id, starts_at, ends_at)
         REFERENCES schedule_slot (id, practitioner_id, starts_at, ends_at)
@@ -223,6 +233,11 @@ CREATE TABLE IF NOT EXISTS encounter (
     updated_at         timestamptz NOT NULL DEFAULT now(),
     -- The encounter must belong to the same patient and practitioner as the
     -- appointment it came from.
+    -- ENG-017: when the record was soft-deleted. NULL is a live record.
+    -- A soft-deleted record is kept whole in the trash table for thirty
+    -- days before it is removed for good, and nothing is removed at all
+    -- while the retention policy says it may not be.
+    deleted_at          timestamptz,
     CONSTRAINT encounter_appointment_match
         FOREIGN KEY (appointment_id, patient_id, practitioner_id)
         REFERENCES appointment (id, patient_id, practitioner_id)
@@ -296,6 +311,11 @@ CREATE TABLE IF NOT EXISTS medication_request (
     updated_at          timestamptz NOT NULL DEFAULT now(),
     -- The shape of the NAFDAC registration number. A number that could not
     -- be right is worse than no number, because it looks right.
+    -- ENG-017: when the record was soft-deleted. NULL is a live record.
+    -- A soft-deleted record is kept whole in the trash table for thirty
+    -- days before it is removed for good, and nothing is removed at all
+    -- while the retention policy says it may not be.
+    deleted_at          timestamptz,
     CONSTRAINT medication_request_nafdac_format
         CHECK (nafdac_number ~ '^(A|B)?[0-9]+-[0-9]{3,6}$'),
     -- The prescription must belong to the same patient and prescriber as the
@@ -345,3 +365,14 @@ $$;
 -- database trigger in ENG-001: ENG-002 introduces the shared write path
 -- (authentication, authorization, audit) and that is the right place to add
 -- one consistent trigger for every table.
+
+-- ---------------------------------------------------------------------------
+-- The retention job (ENG-017).
+-- ---------------------------------------------------------------------------
+-- A table created before the retention job existed gets the column here, so
+-- that re-running this file upgrades it rather than doing nothing. The rows
+-- that predate it are live rows: NULL means live.
+ALTER TABLE patient ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE appointment ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE encounter ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE medication_request ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
