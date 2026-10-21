@@ -30,6 +30,17 @@ from telemedicine.records import (
 NOW = datetime(2026, 10, 21, 14, 0, tzinfo=timezone.utc)
 
 
+# A moment in the future, in the practice's own local time.
+#
+# A slot in the past cannot be booked, so a test that books one must not
+# use a fixed date: the wall clock moves, and a suite that stops passing at
+# a particular hour is a suite that fails in the continuous integration.
+def tomorrow_at(hour: int, minute: int = 0):
+    from datetime import datetime, timedelta
+    moment = datetime.now() + timedelta(days=1)
+    return moment.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
 class ApiTestCase(unittest.TestCase):
     """A small system with a patient, a practitioner, a visit and a prescription."""
 
@@ -67,7 +78,7 @@ class ApiTestCase(unittest.TestCase):
         # A booked visit, the encounter it produced and a prescription.
         self.slot = self.slots.create_slot(
             self.practitioner_account, practitioner_id="practitioner-1",
-            local_start=datetime(2026, 10, 21, 14, 0), local_end=datetime(2026, 10, 21, 14, 30),
+            local_start=tomorrow_at(14), local_end=tomorrow_at(14, 30),
             timezone_name="Europe/Berlin")
         self.appointment = self.booking.book(self.patient_account, self.slot.slot_id)
         self.encounter = self.records.create_encounter(
@@ -247,8 +258,8 @@ class WriteTest(ApiTestCase):
     def test_a_patient_books_an_appointment(self):
         slot = self.slots.create_slot(
             self.practitioner_account, practitioner_id="practitioner-1",
-            local_start=datetime(2026, 10, 22, 9, 0),
-            local_end=datetime(2026, 10, 22, 9, 30), timezone_name="Europe/Berlin")
+            local_start=tomorrow_at(9),
+            local_end=tomorrow_at(9, 30), timezone_name="Europe/Berlin")
         body = {
             "resourceType": "Appointment",
             "status": "booked",
@@ -269,8 +280,8 @@ class WriteTest(ApiTestCase):
     def test_booking_a_slot_twice_is_a_conflict(self):
         slot = self.slots.create_slot(
             self.practitioner_account, practitioner_id="practitioner-1",
-            local_start=datetime(2026, 10, 22, 10, 0),
-            local_end=datetime(2026, 10, 22, 10, 30), timezone_name="Europe/Berlin")
+            local_start=tomorrow_at(10),
+            local_end=tomorrow_at(10, 30), timezone_name="Europe/Berlin")
         body = {
             "resourceType": "Appointment",
             "status": "booked",

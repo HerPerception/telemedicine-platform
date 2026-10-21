@@ -16,6 +16,17 @@ from tests.test_persistence import _fresh_database
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
 
 
+# A moment in the future, in the practice's own local time.
+#
+# A slot in the past cannot be booked, so a test that books one must not
+# use a fixed date: the wall clock moves, and a suite that stops passing at
+# a particular hour is a suite that fails in the continuous integration.
+def tomorrow_at(hour: int, minute: int = 0):
+    from datetime import datetime, timedelta
+    moment = datetime.now() + timedelta(days=1)
+    return moment.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
 class FakeClock:
     def __init__(self, start=NOW):
         self.now = start
@@ -212,8 +223,8 @@ class BookingNotificationTest(unittest.TestCase):
         from datetime import datetime as dt
         return self.slots.create_slot(
             self.practitioner, practitioner_id="practitioner-1",
-            local_start=dt(2026, 10, 21, hour, 0),
-            local_end=dt(2026, 10, 21, hour, 30), timezone_name="Europe/Berlin")
+            local_start=tomorrow_at(hour),
+            local_end=tomorrow_at(hour, 30), timezone_name="Europe/Berlin")
 
     def test_a_booking_queues_a_confirmation_for_both_parties(self):
         from telemedicine.notifications import KIND_APPOINTMENT_BOOKED

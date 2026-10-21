@@ -81,16 +81,23 @@ it. Do not leave this blank if the service does anything of the kind.]**
 
 *(Section 27(1)(e))*
 
-| Record | How long |
-| --- | --- |
-| Your clinical record — your notes, your diagnoses, your prescriptions | **[to be confirmed: the period set by the National Health Act 2014 and the guidance of the Medical and Dental Council of Nigeria]** |
-| Your appointments | **[to be confirmed]** |
-| The audit trail — who did what to your record | **[to be confirmed]** |
-| Your consent decisions | **[to be confirmed — kept at least as long as the record they relate to]** |
-| Records of failed sign-in attempts | **[to be confirmed — a short, fixed period]** |
+> **DRAFT - pending legal advisor.** The numbers below are conventional practice, not law. They are the
+> placeholders the system runs on while the practice waits for a qualified adviser, and they
+> change when the adviser confirms them.
 
-**[Until these periods are confirmed, nothing is deleted. When they are, they will be written here,
-and this notice will say what changed and when.]**
+| Record | How long we keep it | Where the number comes from |
+| --- | --- | --- |
+| clinical record | 5 years after the last visit (or until the patient reaches 21, if they were a child) | conventional practice, not yet confirmed by an adviser |
+| prescription document | 10 years after it was issued | conventional practice, not yet confirmed by an adviser |
+| audit log | 7 years after the entry was written | conventional practice, not yet confirmed by an adviser |
+
+**[Until these periods are confirmed, nothing is deleted — and the mechanism that would delete
+anything is switched off in two places, so it cannot run by accident. When the periods are
+confirmed, this table will be regenerated from the policy file, and this notice will say what
+changed and when.]**
+
+Your consent decisions are kept at least as long as the record they relate to, and records of
+failed sign-in attempts are kept for a short, fixed period — the practice sets that one.
 
 ## 6. Your rights
 

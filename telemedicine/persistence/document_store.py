@@ -67,6 +67,22 @@ class PostgresDocumentStore:
                 row = cursor.fetchone()
         return _to_document(row) if row else None
 
+    def all_metadata(self) -> list:
+        """Every document, without its bytes.
+
+        The retention job reads this to find the documents that are past
+        their period; loading the PDFs of a whole practice to do that would
+        be a waste of memory for no reason.
+        """
+        from telemedicine.prescriptions import DocumentMetadata
+        with self.database.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, medication_request_id, created_at"
+                    " FROM prescription_document ORDER BY created_at")
+                return [DocumentMetadata(str(row[0]), str(row[1]), row[2])
+                        for row in cursor.fetchall()]
+
     def verify_checksum(self, document_id: str) -> bool:
         """Whether the stored bytes still hash to the recorded checksum."""
         document = self.get(document_id)

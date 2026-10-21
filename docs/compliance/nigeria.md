@@ -340,8 +340,11 @@ The engineering work that follows from this document, in the order it should be 
 2. ~~**Carry the brand name and the NAFDAC number**~~ — **done (ENG-016)**: on the document, in the
    database, and in the FHIR mapping. The Essential Drugs List check is not, and cannot be until
    the practice has the list (§6).
-3. **Apply the retention policy** — the deletion job, the "deleted" marker, and the audit entry for
-   each deletion, once the periods are confirmed (§5).
+3. ~~**Apply the retention policy**~~ — **the machinery is built (ENG-017)**: the policy file, the
+   job that finds what is past its period, the trash, the thirty-day grace period, the immutable
+   record of every removal, and the two flags that stop anything being deleted. What is missing is
+   the numbers: the periods are placeholders until the adviser confirms them, and the job does
+   nothing until they are (§5).
 4. **A place to record the basis for a transfer**, and to refuse a transfer with no basis (§7).
 5. **The media transport**, written as an interface with one implementation: a server the practice
    runs (§7).

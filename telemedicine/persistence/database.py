@@ -32,7 +32,7 @@ EXPECTED_TABLES = (
     "patient", "practitioner", "schedule_slot", "appointment", "encounter",
     "medication_request", "user_account", "auth_session", "audit_log",
     "prescription_document", "auth_lockout", "notification_outbox",
-    "consent_event",
+    "consent_event", "deleted_record", "deletion_audit",
 )
 
 SCHEMA_FILES = (
@@ -42,6 +42,7 @@ SCHEMA_FILES = (
     "security_schema.sql",
     "notification_schema.sql",
     "consent_schema.sql",
+    "retention_schema.sql",
 )
 
 # The advisory lock key of the audit chain. Every writer of an audit entry
