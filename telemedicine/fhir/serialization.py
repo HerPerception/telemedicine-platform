@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from telemedicine.medications import NAFDAC_SYSTEM
 from telemedicine.records import (
     Appointment,
     Encounter,
@@ -45,6 +46,17 @@ UCUM_SYSTEM = "http://unitsofmeasure.org"
 # The one extension this project declares (docs/fhir-mappings.md §2.4)
 CLINICAL_NOTE_EXTENSION = (
     "https://telemedicine.example.org/fhir/StructureDefinition/encounter-clinical-note")
+
+# The extensions ENG-016 declares for the Nigerian dispensing identity.
+# R4 has no element for the brand a product is sold under, or for the
+# registration number the regulator gave it, so they are carried as
+# extensions rather than parsed out of the human-readable text.
+MEDICATION_BRAND_NAME_EXTENSION = (
+    "https://telemedicine.example.org/fhir/StructureDefinition/medication-brand-name")
+MEDICATION_GENERIC_NAME_EXTENSION = (
+    "https://telemedicine.example.org/fhir/StructureDefinition/medication-generic-name")
+MEDICATION_STRENGTH_EXTENSION = (
+    "https://telemedicine.example.org/fhir/StructureDefinition/medication-strength")
 
 FHIR_VERSION = "4.0.1"
 FHIR_CONTENT_TYPE = "application/fhir+json; charset=utf-8"
@@ -282,8 +294,73 @@ def encounter_resource(encounter: Encounter) -> dict:
     return resource
 
 
+def _medication_concept(prescription: Prescription) -> dict:
+    """The ``medicationCodeableConcept`` of a prescription.
+
+    Two codings: the coded concept first — the thing the safety checks work
+    on — and the NAFDAC registration number second, the thing the pharmacy
+    dispenses on. The text is what a person reads, and it says all three
+    things: the brand, the generic name in brackets, and the registration
+    number.
+    """
+    coding = [{
+        "system": prescription.medication_system,
+        "code": prescription.medication_code,
+        "display": prescription.medication_display,
+    }]
+    if prescription.nafdac_number:
+        coding.append({
+            "system": NAFDAC_SYSTEM,
+            "code": prescription.nafdac_number,
+            "display": _headline(prescription),
+        })
+    if prescription.brand_name and prescription.generic_name and prescription.nafdac_number:
+        text = (f"{prescription.brand_name} [{prescription.generic_name}]"
+                f" - NAFDAC: {prescription.nafdac_number}")
+    else:
+        # A prescription from before the dispensing identity was required.
+        text = prescription.medication_display
+    return {"coding": coding, "text": text}
+
+
+def _headline(prescription: Prescription) -> str:
+    """The brand and the strength, as the document prints them large."""
+    if prescription.strength:
+        return f"{prescription.brand_name} {prescription.strength}".strip()
+    return prescription.brand_name
+
+
+def _medication_extensions(prescription: Prescription) -> List[dict]:
+    """The extensions that carry the dispensing identity."""
+    extensions: List[dict] = []
+    if prescription.brand_name:
+        extensions.append({
+            "url": MEDICATION_BRAND_NAME_EXTENSION,
+            "valueString": prescription.brand_name,
+        })
+    if prescription.generic_name:
+        extensions.append({
+            "url": MEDICATION_GENERIC_NAME_EXTENSION,
+            "valueString": prescription.generic_name,
+        })
+    if prescription.strength:
+        extensions.append({
+            "url": MEDICATION_STRENGTH_EXTENSION,
+            "valueString": prescription.strength,
+        })
+    return extensions
+
+
 def medication_request_resource(prescription: Prescription) -> dict:
-    """Project a prescription onto a FHIR ``MedicationRequest``."""
+    """Project a prescription onto a FHIR ``MedicationRequest``.
+
+    ``medicationCodeableConcept`` carries two codings (ENG-016): the coded
+    concept the safety checks work on — RxNorm, or whatever local code
+    system the practice uses — first, and the NAFDAC registration number
+    second, so that the pharmacy can dispense what was prescribed. The RxNorm
+    coding is still first, so a client that reads the first coding reads
+    what it read before.
+    """
     resource: dict = {
         "resourceType": "MedicationRequest",
         "id": prescription.prescription_id,
@@ -295,18 +372,14 @@ def medication_request_resource(prescription: Prescription) -> dict:
         }],
         "status": prescription.status,
         "intent": "order",
-        "medicationCodeableConcept": {
-            "coding": [{
-                "system": prescription.medication_system,
-                "code": prescription.medication_code,
-                "display": prescription.medication_display,
-            }],
-            "text": prescription.medication_display,
-        },
+        "medicationCodeableConcept": _medication_concept(prescription),
         "subject": {"reference": f"Patient/{prescription.patient_id}"},
         "encounter": {"reference": f"Encounter/{prescription.encounter_id}"},
         "requester": {"reference": f"Practitioner/{prescription.prescriber_id}"},
     }
+    extensions = _medication_extensions(prescription)
+    if extensions:
+        resource["extension"] = extensions
     if prescription.authored_on:
         resource["authoredOn"] = _instant(prescription.authored_on)
     if prescription.notes:

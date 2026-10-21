@@ -181,6 +181,89 @@ class TreatmentRelationshipTest(ClinicalTestCase):
         self.assertEqual(read.appointment_id, appointment.appointment_id)
 
 
+class PrescriptionTest(ClinicalTestCase):
+    """A prescription in the database, with the Nigerian dispensing identity."""
+
+    def _visit(self):
+        """A booked visit, an encounter, and the services that made them."""
+        from telemedicine.auth import AuthService
+        from telemedicine.booking import BookingService
+        from telemedicine.models import Role
+        from telemedicine.records import RecordsService
+
+        records = self.make_records()
+        slots = self.make_slots()
+        auth = AuthService(audit=records.audit, password_iterations=1000)
+        patient_id = str(uuid.uuid4())
+        practitioner_id = str(uuid.uuid4())
+        patient_account = auth.register("ada@example.org", "a-long-passphrase", Role.PATIENT,
+                                        record_id=patient_id)
+        practitioner_account = auth.register("dr@example.org", "a-long-passphrase",
+                                             Role.PRACTITIONER,
+                                             record_id=practitioner_id)
+        self.store.save_patient(self.patient(user_id=patient_account.user_id,
+                                             patient_id=patient_id))
+        self.store.save_practitioner(self.practitioner(
+            user_id=practitioner_account.user_id, practitioner_id=practitioner_id))
+        booking = BookingService(slots, records=records, accounts=auth.users,
+                                 audit=records.audit)
+        slot = slots.create_slot(
+            practitioner_account,
+            practitioner_id=practitioner_id,
+            local_start=datetime(2026, 10, 21, 14, 0),
+            local_end=datetime(2026, 10, 21, 14, 30), timezone_name="Europe/Berlin")
+        appointment = booking.book(patient_account, slot.slot_id)
+        encounter = records.create_encounter(
+            practitioner_account, appointment.appointment_id,
+            started_at=NOW, ended_at=NOW)
+        return records, practitioner_account, encounter
+
+    def _issue(self, records, practitioner_account, encounter, **overrides):
+        arguments = {
+            "medication_code": "AMOX-500-CAP",
+            "medication_display": "Amoxicillin 500 mg capsule",
+            "dosage_text": "Take one capsule by mouth three times a day for 5 days.",
+            "brand_name": "Emoclox",
+            "generic_name": "Amoxicillin 500mg",
+            "strength": "500mg Capsules",
+            "nafdac_number": "A4-1234",
+        }
+        arguments.update(overrides)
+        return records.issue_prescription(practitioner_account, encounter.encounter_id,
+                                          **arguments)
+
+    def test_the_dispensing_identity_round_trips(self):
+        records, practitioner_account, encounter = self._visit()
+        prescription = self._issue(records, practitioner_account, encounter)
+        found = self.store.get_prescription(prescription.prescription_id)
+        self.assertIsNotNone(found)
+        self.assertEqual(found.brand_name, "Emoclox")
+        self.assertEqual(found.generic_name, "Amoxicillin 500mg")
+        self.assertEqual(found.strength, "500mg Capsules")
+        self.assertEqual(found.nafdac_number, "A4-1234")
+        self.assertEqual(found.medication_code, "AMOX-500-CAP")
+
+    def test_the_database_refuses_a_nafdac_number_of_the_wrong_shape(self):
+        records, practitioner_account, encounter = self._visit()
+        prescription = self._issue(records, practitioner_account, encounter)
+        # The service refuses one before the database is asked; this is the
+        # database's own answer, for a row written past the service.
+        import dataclasses
+        broken = dataclasses.replace(prescription, nafdac_number="nonsense")
+        with self.assertRaises(Exception) as caught:
+            self.store.save_prescription(broken)
+        self.assertIn("medication_request_nafdac_format", str(caught.exception))
+
+    def test_the_database_refuses_a_prescription_without_a_brand(self):
+        records, practitioner_account, encounter = self._visit()
+        import dataclasses
+        prescription = self._issue(records, practitioner_account, encounter)
+        broken = dataclasses.replace(prescription, brand_name="")
+        with self.assertRaises(Exception) as caught:
+            self.store.save_prescription(broken)
+        self.assertIn("brand_name", str(caught.exception))
+
+
 class DoubleBookingTest(ClinicalTestCase):
     """Two instances, one slot, one appointment."""
 

@@ -187,6 +187,10 @@ ALLOWED_IDENTIFIER_SYSTEMS = {
 # Extensions this project declares (docs/fhir-mappings.md section 2.4)
 ALLOWED_EXTENSIONS = {
     "https://telemedicine.example.org/fhir/StructureDefinition/encounter-clinical-note",
+    # ENG-016: the Nigerian dispensing identity of a medication.
+    "https://telemedicine.example.org/fhir/StructureDefinition/medication-brand-name",
+    "https://telemedicine.example.org/fhir/StructureDefinition/medication-generic-name",
+    "https://telemedicine.example.org/fhir/StructureDefinition/medication-strength",
 }
 
 CANONICAL_BASE = "https://telemedicine.example.org/fhir/"

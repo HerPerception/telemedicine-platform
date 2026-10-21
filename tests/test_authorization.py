@@ -203,6 +203,10 @@ class RecordsServiceAccessTest(unittest.TestCase):
             self.practitioner, "encounter-1",
             medication_code="AMOX-500-CAP",
             medication_display="Amoxicillin 500 mg capsule",
+            brand_name="Emoclox",
+            generic_name="Amoxicillin 500mg",
+            strength="500mg Capsules",
+            nafdac_number="A4-1234",
             dosage_text="One capsule by mouth three times a day for 5 days.",
         )
         self.assertEqual(prescription.patient_id, PATIENT_ID)
@@ -219,6 +223,10 @@ class RecordsServiceAccessTest(unittest.TestCase):
                 self.other_practitioner, "encounter-1",
                 medication_code="AMOX-500-CAP",
                 medication_display="Amoxicillin 500 mg capsule",
+                brand_name="Emoclox",
+                generic_name="Amoxicillin 500mg",
+                strength="500mg Capsules",
+                nafdac_number="A4-1234",
                 dosage_text="One capsule by mouth three times a day for 5 days.",
             )
         denials = [entry for entry in self.audit.entries
@@ -232,6 +240,10 @@ class RecordsServiceAccessTest(unittest.TestCase):
                 self.patient, "encounter-1",
                 medication_code="AMOX-500-CAP",
                 medication_display="Amoxicillin 500 mg capsule",
+                brand_name="Emoclox",
+                generic_name="Amoxicillin 500mg",
+                strength="500mg Capsules",
+                nafdac_number="A4-1234",
                 dosage_text="One capsule by mouth three times a day for 5 days.",
             )
 
@@ -241,13 +253,20 @@ class RecordsServiceAccessTest(unittest.TestCase):
             self.service.issue_prescription(self.practitioner, "encounter-1",
                                             medication_code="",
                                             medication_display="",
-                                            dosage_text="")
+                                            dosage_text="",
+                                            brand_name="Emoclox",
+                                            generic_name="Amoxicillin 500mg",
+                                            nafdac_number="A4-1234")
 
     def test_the_patient_may_read_their_own_prescription(self):
         prescription = self.service.issue_prescription(
             self.practitioner, "encounter-1",
             medication_code="AMOX-500-CAP",
             medication_display="Amoxicillin 500 mg capsule",
+            brand_name="Emoclox",
+            generic_name="Amoxicillin 500mg",
+            strength="500mg Capsules",
+            nafdac_number="A4-1234",
             dosage_text="One capsule by mouth three times a day for 5 days.",
         )
         read = self.service.read_prescription(self.patient, prescription.prescription_id)
@@ -261,6 +280,10 @@ class RecordsServiceAccessTest(unittest.TestCase):
             self.practitioner, "encounter-1",
             medication_code="AMOX-500-CAP",
             medication_display="Amoxicillin 500 mg capsule",
+            brand_name="Emoclox",
+            generic_name="Amoxicillin 500mg",
+            strength="500mg Capsules",
+            nafdac_number="A4-1234",
             dosage_text="One capsule by mouth three times a day for 5 days.",
         )
         with self.assertRaises(AuthorizationError):
@@ -271,6 +294,10 @@ class RecordsServiceAccessTest(unittest.TestCase):
             self.practitioner, "encounter-1",
             medication_code="AMOX-500-CAP",
             medication_display="Amoxicillin 500 mg capsule",
+            brand_name="Emoclox",
+            generic_name="Amoxicillin 500mg",
+            strength="500mg Capsules",
+            nafdac_number="A4-1234",
             dosage_text="One capsule by mouth three times a day for 5 days.",
         )
         read = self.service.read_prescription(self.practitioner, prescription.prescription_id)
@@ -281,6 +308,10 @@ class RecordsServiceAccessTest(unittest.TestCase):
             self.practitioner, "encounter-1",
             medication_code="AMOX-500-CAP",
             medication_display="Amoxicillin 500 mg capsule",
+            brand_name="Emoclox",
+            generic_name="Amoxicillin 500mg",
+            strength="500mg Capsules",
+            nafdac_number="A4-1234",
             dosage_text="One capsule by mouth three times a day for 5 days.",
         )
         with self.assertRaises(AuthorizationError):
@@ -294,6 +325,10 @@ class RecordsServiceAccessTest(unittest.TestCase):
             self.practitioner, "encounter-1",
             medication_code="AMOX-500-CAP",
             medication_display="Amoxicillin 500 mg capsule",
+            brand_name="Emoclox",
+            generic_name="Amoxicillin 500mg",
+            strength="500mg Capsules",
+            nafdac_number="A4-1234",
             dosage_text="One capsule by mouth three times a day for 5 days.",
         )
         entry = [item for item in self.audit.entries

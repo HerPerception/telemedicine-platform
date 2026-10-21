@@ -227,10 +227,12 @@ class DocumentTest(StateTestCase):
             cursor.execute(
                 "INSERT INTO medication_request (id, encounter_id, patient_id, prescriber_id,"
                 " medication_system, medication_code, medication_display, dosage_text,"
-                " status, authored_on) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " status, authored_on, brand_name, generic_name, strength, nafdac_number)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (request_id, encounter_id, patient_id, practitioner_id,
                  "https://telemedicine.example.org/CodeSystem/medication", "AMOX-500-CAP",
-                 "Amoxicillin 500 mg capsule", "One capsule three times a day", "active", NOW))
+                 "Amoxicillin 500 mg capsule", "One capsule three times a day", "active", NOW,
+                 "Emoclox", "Amoxicillin 500mg", "500mg Capsules", "A4-1234"))
         return request_id
 
     def _document(self, medication_request_id=None):

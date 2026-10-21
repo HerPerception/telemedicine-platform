@@ -56,6 +56,7 @@ exists; check the repository before assuming anything.
 | `telemedicine/delivery.py` | The delivery worker, and the transport that talks to a mail server |
 | `telemedicine/consent.py` | The consent record: what a patient agreed to, and what they withdrew |
 | `telemedicine/consent_api.py` | The consent endpoints: a patient grants and withdraws, a clinician reads |
+| `telemedicine/medications.py` | The Nigerian dispensing identity of a medicine: the brand, the NAFDAC number, and the example list |
 | `db/consent_schema.sql` | PostgreSQL DDL for the consent record — append-only, like the audit log |
 | `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
 | `telemedicine/config.py`, `telemedicine/application.py` | The settings, and the application assembled from them |

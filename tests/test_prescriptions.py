@@ -92,8 +92,103 @@ class PrescriptionTestCase(unittest.TestCase):
             actor or self.practitioner, "encounter-1",
             medication_code="AMOX-500-CAP",
             medication_display="Amoxicillin 500 mg capsule",
+            brand_name="Emoclox",
+            generic_name="Amoxicillin 500mg",
+            strength="500mg Capsules",
+            nafdac_number="A4-1234",
             dosage_text="Take one capsule by mouth three times a day for 5 days.",
         )
+
+
+class TheNigerianDispensingIdentityTest(PrescriptionTestCase):
+    """ENG-016: a prescription has to name the medicine the way a pharmacy needs it.
+
+    These are the tests the task asked for: the prescription tests must fail
+    if the brand or the NAFDAC number is missing, and the printed document
+    must show both.
+    """
+
+    def issue_without(self, **overrides):
+        """Issue a prescription, with the dispensing identity changed."""
+        arguments = {
+            "medication_code": "AMOX-500-CAP",
+            "medication_display": "Amoxicillin 500 mg capsule",
+            "dosage_text": "Take one capsule by mouth three times a day for 5 days.",
+            "brand_name": "Emoclox",
+            "generic_name": "Amoxicillin 500mg",
+            "strength": "500mg Capsules",
+            "nafdac_number": "A4-1234",
+        }
+        arguments.update(overrides)
+        return self.service.issue(self.practitioner, "encounter-1", **arguments)
+
+    # -- the refusals -----------------------------------------------------
+
+    def test_a_prescription_without_a_brand_is_refused(self):
+        with self.assertRaises(ValidationError) as caught:
+            self.issue_without(brand_name="")
+        self.assertIn("Cannot print", str(caught.exception))
+
+    def test_a_prescription_without_a_nafdac_number_is_refused(self):
+        with self.assertRaises(ValidationError) as caught:
+            self.issue_without(nafdac_number="")
+        self.assertIn("Cannot print", str(caught.exception))
+
+    def test_a_prescription_with_a_nonsense_nafdac_number_is_refused(self):
+        with self.assertRaises(ValidationError) as caught:
+            self.issue_without(nafdac_number="not-a-number")
+        self.assertIn("NAFDAC registration number", str(caught.exception))
+
+    def test_a_prescription_without_a_generic_name_is_refused(self):
+        with self.assertRaises(ValidationError) as caught:
+            self.issue_without(generic_name="")
+        self.assertIn("generic name", str(caught.exception))
+
+    def test_a_refused_prescription_is_not_stored(self):
+        with self.assertRaises(ValidationError):
+            self.issue_without(brand_name="")
+        self.assertEqual(len(self.records.list_prescriptions()), 0)
+
+    def test_a_refused_prescription_has_no_document(self):
+        with self.assertRaises(ValidationError):
+            self.issue_without(nafdac_number="")
+        self.assertEqual(len(self.service.documents), 0)
+
+    # -- the document ------------------------------------------------------
+
+    def test_the_document_shows_the_brand_the_generic_and_the_number(self):
+        _, document = self.issue()
+        text = document.body.decode("latin-1")
+        self.assertIn("Emoclox 500mg Capsules", text)
+        self.assertIn("[Amoxicillin 500mg]", text)
+        self.assertIn("NAFDAC REG NO: A4-1234", text)
+
+    def test_the_brand_is_printed_large_and_bold(self):
+        _, document = self.issue()
+        text = document.body.decode("latin-1")
+        # The bold face and the larger size, and the heading itself.
+        self.assertIn("/F2 16 Tf", text)
+        self.assertIn("(Emoclox 500mg Capsules) Tj", text)
+
+    def test_the_generic_name_and_the_number_are_not_bold(self):
+        _, document = self.issue()
+        text = document.body.decode("latin-1")
+        self.assertIn("([Amoxicillin 500mg]) Tj", text)
+        self.assertIn("(NAFDAC REG NO: A4-1234) Tj", text)
+        # Only the heading is set in the bold face.
+        self.assertEqual(text.count("/F2 16 Tf"), 1)
+
+    def test_a_legacy_prescription_cannot_be_printed(self):
+        """A row from before the requirement existed has no brand and no number."""
+        import dataclasses
+        prescription, _document = self.issue()
+        legacy = dataclasses.replace(prescription, brand_name="", nafdac_number="")
+        with self.assertRaises(ValidationError) as caught:
+            from telemedicine.prescriptions import prescription_document_lines
+            prescription_document_lines(
+                legacy, patient=None, practitioner=None,
+                issued_at=datetime(2026, 10, 21, 14, 0, tzinfo=timezone.utc))
+        self.assertIn("Cannot print", str(caught.exception))
 
 
 class IssuingTest(PrescriptionTestCase):
@@ -136,7 +231,10 @@ class IssuingTest(PrescriptionTestCase):
         with self.assertRaises(ValidationError):
             self.service.issue(self.practitioner, "encounter-1",
                                medication_code="", medication_display="",
-                               dosage_text="")
+                               dosage_text="",
+                               brand_name="Emoclox",
+                               generic_name="Amoxicillin 500mg",
+                               nafdac_number="A4-1234")
 
     def test_the_prescription_is_tied_to_the_encounter_and_the_patient(self):
         prescription, _ = self.issue()
@@ -170,7 +268,12 @@ class DocumentTest(PrescriptionTestCase):
     def test_the_document_states_the_prescription(self):
         _, document = self.issue()
         text = document.body.decode("latin-1")
-        self.assertIn("Amoxicillin 500 mg capsule", text)
+        # The medicine is printed the way a Nigerian pharmacy reads it: the
+        # brand and the strength, the generic name, and the registration
+        # number.
+        self.assertIn("Emoclox 500mg Capsules", text)
+        self.assertIn("[Amoxicillin 500mg]", text)
+        self.assertIn("NAFDAC REG NO: A4-1234", text)
         self.assertIn("AMOX-500-CAP", text)
         self.assertIn("Take one capsule by mouth three times a day for 5 days.", text)
         self.assertIn("Ada Nwosu Okonkwo", text)
@@ -221,7 +324,9 @@ class DocumentTest(PrescriptionTestCase):
             os.unlink(path)
         text = result.stdout
         self.assertIn("E-PRESCRIPTION", text)
-        self.assertIn("Amoxicillin 500 mg capsule", text)
+        self.assertIn("Emoclox 500mg Capsules", text)
+        self.assertIn("[Amoxicillin 500mg]", text)
+        self.assertIn("NAFDAC REG NO: A4-1234", text)
         self.assertIn("Ada Nwosu Okonkwo", text)
         self.assertIn("Dr. Elena Ramirez", text)
         self.assertIn("Take one capsule by mouth three times a day for 5 days.", text)

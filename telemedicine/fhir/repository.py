@@ -24,6 +24,12 @@ from typing import Dict, List, Optional, Tuple
 
 from telemedicine.booking import BookingService
 from telemedicine.errors import ValidationError
+from telemedicine.fhir.serialization import (
+    MEDICATION_BRAND_NAME_EXTENSION,
+    MEDICATION_GENERIC_NAME_EXTENSION,
+    MEDICATION_STRENGTH_EXTENSION,
+)
+from telemedicine.medications import NAFDAC_SYSTEM
 from telemedicine.models import Role, UserAccount
 from telemedicine.prescriptions import PrescriptionService
 from telemedicine.records import RecordsService
@@ -182,11 +188,21 @@ class FhirRepository:
         medication = _medication(resource)
         dosage_text = _dosage_text(resource)
         details = _prescription_details(resource)
+        # The Nigerian dispensing identity (ENG-016): the brand and the
+        # generic name come from the extensions, the registration number from
+        # the NAFDAC coding. None of them is optional.
+        brand_name = details.pop("brand_name", None) or ""
+        generic_name = details.pop("generic_name", None) or ""
+        strength = details.pop("strength", None)
         prescription, _document = self.prescriptions.issue(
             actor, encounter_id,
             medication_code=medication[1],
             medication_display=medication[2],
             dosage_text=dosage_text,
+            brand_name=brand_name,
+            generic_name=generic_name,
+            nafdac_number=medication[3] or "",
+            strength=strength,
             **details,
         )
         return prescription
@@ -251,7 +267,13 @@ def _encounter_appointment_id(resource: dict) -> Optional[str]:
     return None
 
 
-def _medication(resource: dict) -> Tuple[str, str, str]:
+def _medication(resource: dict) -> Tuple[str, str, str, Optional[str]]:
+    """The medication of a prescription: the coded concept and the NAFDAC number.
+
+    The first coding is the coded concept the safety checks work on; the
+    NAFDAC registration number is found wherever it is, because a client may
+    put it first (ENG-016).
+    """
     concept = resource.get("medicationCodeableConcept") or {}
     codings = concept.get("coding") or []
     if not codings:
@@ -261,7 +283,17 @@ def _medication(resource: dict) -> Tuple[str, str, str]:
     if not code:
         raise ValidationError("the medication must have a code")
     display = coding.get("display") or concept.get("text") or code
-    return coding.get("system"), code, display
+    return coding.get("system"), code, display, _nafdac_code(codings)
+
+
+def _nafdac_code(codings: List[dict]) -> Optional[str]:
+    """The NAFDAC registration number, if the resource carries one."""
+    for coding in codings:
+        if not isinstance(coding, dict):
+            continue
+        if coding.get("system") == NAFDAC_SYSTEM and coding.get("code"):
+            return str(coding["code"])
+    return None
 
 
 def _dosage_text(resource: dict) -> str:
@@ -355,8 +387,28 @@ def _encounter_details(resource: dict, updating: bool = False) -> dict:
     return details
 
 
+def _medication_extensions(resource: dict) -> dict:
+    """The dispensing identity, carried by the extensions (ENG-016)."""
+    values: dict = {}
+    for extension in resource.get("extension") or []:
+        if not isinstance(extension, dict):
+            continue
+        url = extension.get("url", "")
+        value = extension.get("valueString")
+        if not value:
+            continue
+        if url == MEDICATION_BRAND_NAME_EXTENSION:
+            values["brand_name"] = value
+        elif url == MEDICATION_GENERIC_NAME_EXTENSION:
+            values["generic_name"] = value
+        elif url == MEDICATION_STRENGTH_EXTENSION:
+            values["strength"] = value
+    return values
+
+
 def _prescription_details(resource: dict) -> dict:
     details: dict = {}
+    details.update(_medication_extensions(resource))
     notes = resource.get("note") or []
     if notes and notes[0].get("text"):
         details["notes"] = notes[0]["text"]

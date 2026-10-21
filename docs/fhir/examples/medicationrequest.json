@@ -17,15 +17,34 @@
   ],
   "status": "active",
   "intent": "order",
+  "extension": [
+    {
+      "url": "https://telemedicine.example.org/fhir/StructureDefinition/medication-brand-name",
+      "valueString": "Emoclox"
+    },
+    {
+      "url": "https://telemedicine.example.org/fhir/StructureDefinition/medication-generic-name",
+      "valueString": "Amoxicillin 500mg"
+    },
+    {
+      "url": "https://telemedicine.example.org/fhir/StructureDefinition/medication-strength",
+      "valueString": "500mg Capsules"
+    }
+  ],
   "medicationCodeableConcept": {
     "coding": [
       {
         "system": "https://telemedicine.example.org/CodeSystem/medication",
         "code": "AMOX-500-CAP",
         "display": "Amoxicillin 500 mg capsule"
+      },
+      {
+        "system": "https://www.nafdac.gov.ng/registration",
+        "code": "A4-1234",
+        "display": "Emoclox 500mg Capsules"
       }
     ],
-    "text": "Amoxicillin 500 mg capsule"
+    "text": "Emoclox [Amoxicillin 500mg] - NAFDAC: A4-1234"
   },
   "subject": {
     "reference": "Patient/1f3c9a20-6b1e-4c2f-9a44-0d5b6c7e8f91",

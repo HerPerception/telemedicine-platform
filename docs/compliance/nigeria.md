@@ -199,9 +199,13 @@ allergies can be checked, and it has to be *dispensable* in a Nigerian pharmacy:
 | the **brand name** and the **NAFDAC registration number** | what the pharmacy actually dispenses; without it a prescription with an invented code cannot be dispensed |
 | the dose, the route and the duration, in plain words | the prescriber's words, not the code's |
 
-**What the software does now.** ENG-005 issues the prescription document; it carries the medication
-coded and the dose in plain text. **It does not yet carry the brand or the NAFDAC number** — that is
-a change to the prescription document and to the FHIR mapping, and it is in §13.
+**What the software does now.** ENG-016 carries the whole identity on the prescription: the coded
+concept for the safety checks, and the brand, the strength and the NAFDAC registration number for
+the pharmacy. The document prints the brand and the strength large and bold, the generic name in
+brackets, and the registration number under them, and **a prescription without a brand or without a
+registration number is refused rather than printed**. The database refuses a registration number
+that does not have the right shape, and the FHIR resource carries the NAFDAC number as a second
+coding beside the coded concept.
 
 The one thing that must not happen: a prescription that names a medicine the Essential Drugs List
 does not carry should be a decision a prescriber makes knowingly, not an accident of a code that
@@ -333,8 +337,9 @@ The engineering work that follows from this document, in the order it should be 
    withdraw, and a clinician who treats them can see the state before an optional use. The notice
    acknowledgement is an explicit act rather than part of registration, because there is no HTTP
    sign-up to attach it to. `docs/consent-design.md`.
-2. **Carry the brand name and the NAFDAC number** on the prescription document and in the FHIR
-   mapping (§6).
+2. ~~**Carry the brand name and the NAFDAC number**~~ — **done (ENG-016)**: on the document, in the
+   database, and in the FHIR mapping. The Essential Drugs List check is not, and cannot be until
+   the practice has the list (§6).
 3. **Apply the retention policy** — the deletion job, the "deleted" marker, and the audit entry for
    each deletion, once the periods are confirmed (§5).
 4. **A place to record the basis for a transfer**, and to refuse a transfer with no basis (§7).

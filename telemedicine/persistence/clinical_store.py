@@ -248,9 +248,10 @@ class PostgresClinicalRepository:
                 "INSERT INTO medication_request (id, encounter_id, patient_id, prescriber_id,"
                 " medication_system, medication_code, medication_display, dosage_text, status,"
                 " intent, authored_on, notes, refills, dispense_quantity, route_text,"
-                " dose_quantity, dose_unit, duration_days, created_at, updated_at)"
+                " dose_quantity, dose_unit, duration_days, brand_name, generic_name, strength,"
+                " nafdac_number, created_at, updated_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
-                " %s, %s)"
+                " %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (id) DO UPDATE SET"
                 " encounter_id = EXCLUDED.encounter_id, patient_id = EXCLUDED.patient_id,"
                 " prescriber_id = EXCLUDED.prescriber_id,"
@@ -258,6 +259,8 @@ class PostgresClinicalRepository:
                 " medication_code = EXCLUDED.medication_code,"
                 " medication_display = EXCLUDED.medication_display,"
                 " dosage_text = EXCLUDED.dosage_text, status = EXCLUDED.status,"
+                " brand_name = EXCLUDED.brand_name, generic_name = EXCLUDED.generic_name,"
+                " strength = EXCLUDED.strength, nafdac_number = EXCLUDED.nafdac_number,"
                 " intent = EXCLUDED.intent, notes = EXCLUDED.notes, refills = EXCLUDED.refills,"
                 " dispense_quantity = EXCLUDED.dispense_quantity,"
                 " route_text = EXCLUDED.route_text, dose_quantity = EXCLUDED.dose_quantity,"
@@ -270,6 +273,8 @@ class PostgresClinicalRepository:
                  "order", prescription.authored_on, prescription.notes, prescription.refills,
                  prescription.dispense_quantity, prescription.route_text,
                  prescription.dose_quantity, prescription.dose_unit, prescription.duration_days,
+                 prescription.brand_name, prescription.generic_name, prescription.strength,
+                 prescription.nafdac_number,
                  datetime.now(timezone.utc), datetime.now(timezone.utc)))
         return prescription
 
@@ -349,7 +354,8 @@ _PRESCRIPTION_SELECT = (
     "SELECT m.id, m.encounter_id, m.patient_id, m.prescriber_id, m.medication_system,"
     " m.medication_code, m.medication_display, m.dosage_text, m.status, m.authored_on,"
     " m.notes, m.refills, m.dispense_quantity, m.route_text, m.dose_quantity, m.dose_unit,"
-    " m.duration_days, p.account_ref, pr.account_ref"
+    " m.duration_days, m.brand_name, m.generic_name, m.strength, m.nafdac_number,"
+    " p.account_ref, pr.account_ref"
     " FROM medication_request m"
     " JOIN patient p ON p.id = m.patient_id"
     " JOIN practitioner pr ON pr.id = m.prescriber_id")
@@ -440,8 +446,8 @@ def _to_prescription(row) -> Prescription:
         encounter_id=str(row[1]),
         patient_id=str(row[2]),
         prescriber_id=str(row[3]),
-        patient_user_id=row[17],
-        prescriber_user_id=row[18],
+        patient_user_id=row[21],
+        prescriber_user_id=row[22],
         medication_system=row[4],
         medication_code=row[5],
         medication_display=row[6],
@@ -455,6 +461,10 @@ def _to_prescription(row) -> Prescription:
         dose_quantity=row[14],
         dose_unit=row[15],
         duration_days=row[16],
+        brand_name=row[17] or "",
+        generic_name=row[18] or "",
+        strength=row[19],
+        nafdac_number=row[20] or "",
     )
 
 
