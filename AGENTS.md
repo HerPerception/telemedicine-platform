@@ -80,7 +80,16 @@ exists; check the repository before assuming anything.
 | `scripts/audit_external_services.py` | The inventory of the external services, and whether anything was sent to them |
 | `webrtc-server/` | The media server, the TURN server, the bucket, and the client page |
 | `web/consents.html` | The patient's page: what they have agreed to, and the button to take it back |
+| `TODO_LEGAL.md` | What is waiting for a lawyer, and what to do until there is one |
 | `config/smart_clients.yaml` | The SMART client registration, and who may sign in through it |
+
+## The demo mode
+
+**`TELEMEDICINE_DEMO_MODE` is on by default**, and every prescription says **"DEMO - NOT FOR REAL
+PATIENTS"** on its face. The practice has no legal adviser yet, and `TODO_LEGAL.md` is the list of
+what is waiting for one — the retention numbers, the transfer justifications, and the wording of
+the notice. Turn the demo mode off only when the documents are going to be real, and use test data
+until then.
 
 ## Consent
 
@@ -169,7 +178,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (768 tests, 74 of them skipped without a database).
+Expected result of the test command: `OK` (785 tests, 74 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 

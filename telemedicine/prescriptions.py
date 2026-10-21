@@ -243,9 +243,16 @@ class DocumentStore:
         return len(self._documents)
 
 
+# The words that go on every document while the demo mode is on. The
+# practice has no legal adviser yet, and a prescription that does not say so
+# on its face is a prescription that could be mistaken for a real one.
+DEMO_WATERMARK = "DEMO - NOT FOR REAL PATIENTS"
+
+
 def prescription_document_lines(prescription: Prescription, *, patient: Optional[PatientRecord],
                                 practitioner: Optional[PractitionerRecord],
-                                issued_at: datetime) -> List[Union[str, PdfLine]]:
+                                issued_at: datetime,
+                                demo_mode: bool = True) -> List[Union[str, PdfLine]]:
     """The lines of the prescription document.
 
     The document states who prescribed what, to whom, and when, and it says
@@ -271,6 +278,9 @@ def prescription_document_lines(prescription: Prescription, *, patient: Optional
     return [
         "E-PRESCRIPTION",
         "",
+        *([PdfLine(DEMO_WATERMARK, size=13, bold=True, space_before=4)]
+          if demo_mode else []),
+        *([DEMO_WATERMARK, ""] if demo_mode else []),
         "Prescription id: %s" % prescription.prescription_id,
         "Issued: %s" % issued_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
         "Status: %s" % prescription.status,
@@ -297,13 +307,17 @@ class PrescriptionService:
     """Issues, views, downloads and changes prescriptions."""
 
     def __init__(self, records: RecordsService, documents: Optional[DocumentStore] = None,
-                 audit: Optional[AuditLog] = None, notifications=None, clock=_utc_now):
+                 audit: Optional[AuditLog] = None, notifications=None, clock=_utc_now,
+                 demo_mode: bool = True):
         self.records = records
         self.documents = documents if documents is not None else DocumentStore()
         self.audit = audit if audit is not None else records.audit
         # Optional: where the "your prescription is ready" message is queued.
         self.notifications = notifications
         self._clock = clock
+        # ENG-022: every document says on its face that it is not for real
+        # patients, until an adviser has signed and this is turned off.
+        self.demo_mode = demo_mode
 
     # -- issuing ----------------------------------------------------------
 
@@ -333,7 +347,8 @@ class PrescriptionService:
         practitioner = self.records.practitioner_record(prescription.prescriber_id)
         lines = prescription_document_lines(
             prescription, patient=patient, practitioner=practitioner,
-            issued_at=prescription.authored_on or self._clock())
+            issued_at=prescription.authored_on or self._clock(),
+            demo_mode=self.demo_mode)
         body = render_pdf(lines)
         document = PrescriptionDocument(
             document_id=str(uuid.uuid4()),

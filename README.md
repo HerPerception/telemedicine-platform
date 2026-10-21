@@ -24,8 +24,20 @@ The client keeps no secret of its own: it proves that it started the flow with P
 nothing in the repository to leak. `docs/deployment.md` §4b has the details, and
 `docs/smart-design.md` has the design.
 
+## Before any real patient is in here
+
+**`TODO_LEGAL.md` is the list of what is waiting for a lawyer**: the retention numbers, the
+cross-border justifications, and the wording of the privacy notice. Until there is an adviser:
+
+- **host everything in Nigeria** — the application, the database, the mail server, the media server
+  and the bucket the recordings go into;
+- **use test data, not real patients**;
+- **leave the demo mode on** — `TELEMEDICINE_DEMO_MODE` is on by default, and every prescription
+  says **"DEMO - NOT FOR REAL PATIENTS"** on its face.
+
 ## The rest of it
 
+- `TODO_LEGAL.md` — what is waiting for a lawyer, and what to do until then
 - `docs/compliance/nigeria.md` — the law the practice is under, and the answers
 - `docs/deployment.md` — what a deployment needs, and how to bring it up
 - `docs/acceptance-traceability.md` — every acceptance criterion, and the test that covers it

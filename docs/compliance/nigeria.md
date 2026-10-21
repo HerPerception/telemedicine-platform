@@ -335,6 +335,14 @@ report are exactly the things a DPO is asked about.
 None of these is an engineering problem. They are four questions for the practice and its adviser,
 and they are the last of the compliance review's blockers.
 
+## 12a. The demo mode
+
+Until an adviser has confirmed the retention numbers, the transfer bases and the wording of the
+notice, **the documents are not real documents**: `TELEMEDICINE_DEMO_MODE` is on by default, and
+every prescription says **"DEMO - NOT FOR REAL PATIENTS"** on its face. The whole list of what is
+waiting is in `TODO_LEGAL.md`, together with the recommendation: host everything in Nigeria, and use
+test data.
+
 ## 13. What the software still has to do
 
 The engineering work that follows from this document, in the order it should be done:

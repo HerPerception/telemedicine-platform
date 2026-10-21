@@ -84,6 +84,9 @@ services:
       TELEMEDICINE_SMART_FHIR_ENABLED: ${TELEMEDICINE_SMART_FHIR_ENABLED:-false}
       TELEMEDICINE_SMART_CLIENTS: ${TELEMEDICINE_SMART_CLIENTS:-config/smart_clients.yaml}
       TELEMEDICINE_SMART_STATE_SECRET: ${TELEMEDICINE_SMART_STATE_SECRET:-}
+      # On by default: every document says on its face that it is not for
+      # real patients, until a legal adviser has signed.
+      TELEMEDICINE_DEMO_MODE: ${TELEMEDICINE_DEMO_MODE:-true}
     depends_on:
       database:
         condition: service_healthy
