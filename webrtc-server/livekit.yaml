@@ -1,0 +1,67 @@
+# The media server's configuration.
+#
+# This file is read by the livekit-server container. The key and the secret
+# are not here: they come from the environment (LIVEKIT_KEYS), so that they
+# are not written down twice.
+
+# The signalling port. The browser connects to it over the websocket.
+port: 7880
+
+# The media ports. The TCP one is for the networks where UDP is blocked,
+# which on a mobile network is more often than not.
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # The server has to be told its own public address, or the two peers will
+  # try to reach each other directly through an address that is not theirs.
+  # On a machine with a public address this is on.
+  use_external_ip: true
+
+# LiveKit's shared state.
+redis:
+  address: redis:6379
+
+room:
+  # A room is created when the first participant with a valid token joins
+  # it. The name of the room is the consultation's, and a token names one
+  # room, so a token for one consultation cannot be used in another.
+  auto_create: true
+  # A room with nobody in it is closed after five minutes, and a participant
+  # who has gone is forgotten after twenty seconds.
+  empty_timeout: 300
+  departure_timeout: 20
+
+# The application is told when a room starts and stops, so that it can
+# record what happened. The endpoint is the application's own, on the
+# practice's own domain.
+webhook:
+  api_key: REPLACE_WITH_THE_LIVEKIT_API_KEY
+  urls:
+    - http://app:8080/video/webhook
+
+# The recordings go into the local bucket, in Nigeria. The endpoint is the
+# MinIO container in the same compose file, so the recording never leaves
+# the machine and never leaves the country.
+recording:
+  storage:
+    provider: "s3"
+    s3:
+      bucket: telemedicine-recordings
+      region: af-south-1
+      endpoint: http://minio:9000
+      access_key: REPLACE_WITH_THE_MINIO_ROOT_USER
+      secret: REPLACE_WITH_THE_MINIO_ROOT_PASSWORD
+      force_path_style: true
+  room:
+    output:
+      filename:
+        template:
+          "{room_name}_{time}"
+      filepath:
+        template: "{start_time}_{room_name}"
+  audio_only: false
+
+logging:
+  level: info
+  format: json

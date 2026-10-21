@@ -349,8 +349,10 @@ The engineering work that follows from this document, in the order it should be 
    **done (ENG-018)**: every outbound path asks the gate before it sends anything, a service
    outside Nigeria needs a lawful basis and a written justification, and a transfer that happens is
    recorded in `transfer_logs` (§7).
-5. **The media transport**, written as an interface with one implementation: a server the practice
-   runs (§7).
+5. ~~**The media transport**, written as an interface with one implementation: a server the practice
+   runs~~ — **done (ENG-019)**: the media server is LiveKit and a TURN server, in `webrtc-server/`,
+   in the country, and the application issues the access tokens (§7). What is left is the practice's
+   own: a host in Nigeria, a public address and a certificate.
 6. **OAuth 2.0 and SMART-on-FHIR**, which the Nigeria Core guide expects and this project does not
    yet have (SEC-08).
 7. **The audit trail exported for the DPO** — the trail is there; the report is not.

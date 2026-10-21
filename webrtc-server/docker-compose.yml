@@ -1,0 +1,94 @@
+# The media server, in Nigeria.
+#
+# To run it locally:
+#
+#     docker compose up
+#
+# in this directory. The API key and the secret come from the .env file
+# beside it; copy .env.example to .env and fill them in first.
+#
+# What each of these is:
+#
+#   livekit  the media server. It carries the picture and the sound, and it
+#            is the only thing that sees them. It runs here, in Nigeria.
+#   coturn   the TURN server. Most mobile networks will not let two phones
+#            talk to each other directly, and the TURN server relays for
+#            them when they cannot.
+#   redis    LiveKit's shared state.
+#   minio    the bucket the recordings go into — here, in Nigeria, on this
+#            machine, and nowhere else.
+#
+# **None of this is a third-party service.** There is no Twilio, no Agora,
+# no LiveKit Cloud: the patient and the clinician both connect to this
+# server, and the media never leaves the country.
+
+name: telemedicine-media
+
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    environment:
+      # The key the application signs tokens with, and the secret it signs
+      # them with. Only the application has the secret: it is the only thing
+      # that can mint a token, and a token is the only way into a room.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_REDIS_ADDRESS: redis:6379
+      LIVEKIT_LOG_LEVEL: info
+      # The media server must know its own public address, or the peers will
+      # try to connect to each other through it and fail.
+      LIVEKIT_NODE_IP: "${LIVEKIT_NODE_IP:-}"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      # The signalling websocket: the browser connects here.
+      - "7880:7880/tcp"
+      # The media, over TCP: for the networks where UDP is blocked.
+      - "7881:7881/tcp"
+      # The media, over UDP: the usual path.
+      - "7882:7882/udp"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  coturn:
+    image: coturn/coturn:latest
+    command: -c /etc/turnserver.conf
+    environment:
+      TURN_SECRET: "${TURN_SECRET}"
+    volumes:
+      - ./turnserver.conf:/etc/turnserver.conf:ro
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "49160-49200:49160-49200/udp"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+    volumes:
+      - recordings:/data
+    ports:
+      # The bucket's API, and its console.
+      - "9000:9000"
+      - "9001:9001"
+    restart: unless-stopped
+
+volumes:
+  recordings:

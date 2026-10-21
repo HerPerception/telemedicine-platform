@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consultation</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         margin: 0; padding: 2rem; line-height: 1.5; }
+  main { max-width: 44rem; margin: 0 auto; }
+  h1 { font-size: 1.4rem; }
+  .box { border: 1px solid #8884; border-radius: .6rem; padding: 1rem 1.2rem;
+         margin: 1rem 0; }
+  .hidden { display: none; }
+  label { display: block; margin: .6rem 0 .2rem; }
+  input { width: 100%; padding: .5rem; font: inherit; }
+  button { font: inherit; padding: .5rem 1.2rem; margin-top: .8rem; cursor: pointer; }
+  video { width: 100%; border-radius: .4rem; background: #000; }
+  .muted { opacity: .7; font-size: .9rem; }
+  .error { color: #b3261e; }
+  #status { font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Consultation</h1>
+
+  <!-- 1. sign in ------------------------------------------------------- -->
+  <section id="signin" class="box">
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username">
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <button id="signin-button">Sign in</button>
+    <p class="error hidden" id="signin-error"></p>
+  </section>
+
+  <!-- 2. the waiting room ---------------------------------------------- -->
+  <section id="waiting" class="box hidden">
+    <p id="status">Waiting for the clinician…</p>
+    <p class="muted" id="waiting-detail"></p>
+    <p class="muted">Your camera and microphone are off until you join. Nothing is sent until then.</p>
+    <button id="join-button">Join the consultation</button>
+  </section>
+
+  <!-- 3. the consultation ----------------------------------------------- -->
+  <section id="call" class="box hidden">
+    <p id="call-status">Connected</p>
+    <video id="remote" autoplay playsinline></video>
+    <video id="local" autoplay playsinline muted></video>
+    <button id="leave-button">Leave</button>
+  </section>
+
+  <p class="muted" id="footer">
+    The media is carried by this practice's own server, in Nigeria. Nothing is sent to a third
+    party.
+  </p>
+</main>
+
+<!--
+  The client library.
+
+  It is loaded from a CDN so that this page works with nothing installed.
+  **A deployment that must not talk to a third party should vendor it**: download
+  livekit-client, put it in the application's static files, and change the
+  script tag below to point at it. The library itself never sees the media —
+  the media goes to this practice's server — but a CDN does see which
+  addresses load the page.
+-->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@1.6.0/dist/livekit-client.umd.js"></script>
+<script>
+"use strict";
+
+// The consultation is named in the address: ?consultation=123
+const consultationId = new URLSearchParams(location.search).get("consultation");
+const appBase = "";            // the application's own address, when it is not the same host
+const sessionKey = "telemedicine.session";
+
+let sessionToken = sessionStorage.getItem(sessionKey);
+let room = null;
+
+function show(id) {
+  for (const name of ["signin", "waiting", "call"]) {
+    document.getElementById(name).classList.toggle("hidden", name !== id);
+  }
+}
+
+async function api(path, options) {
+  const response = await fetch(appBase + path, Object.assign({
+    headers: {
+      "Content-Type": "application/json",
+      ...(sessionToken ? { "Authorization": "Bearer " + sessionToken } : {})
+    }
+  }, options || {}));
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = (body.issue && body.issue[0] && body.issue[0].diagnostics)
+      || body.message || "the request was refused";
+    throw new Error(message);
+  }
+  return body;
+}
+
+document.getElementById("signin-button").addEventListener("click", async () => {
+  const error = document.getElementById("signin-error");
+  error.classList.add("hidden");
+  try {
+    const payload = await api("/fhir/session", {
+      method: "POST",
+      body: JSON.stringify({
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value
+      })
+    });
+    sessionToken = payload.token;
+    sessionStorage.setItem(sessionKey, sessionToken);
+    await askForToken();
+  } catch (problem) {
+    error.textContent = problem.message;
+    error.classList.remove("hidden");
+  }
+});
+
+/* Ask the application for a token for the media server.
+
+   The application checks that the caller is the booked patient or the
+   clinician who delivers the appointment, and that the patient has consented
+   to the consultation being recorded if it is to be recorded. The token is
+   the only way into the room, and it is good for two hours. */
+async function askForToken() {
+  if (!consultationId) {
+    document.getElementById("status").textContent = "No consultation was named in the address.";
+    show("waiting");
+    return;
+  }
+  const token = await api("/video/consultations/" + encodeURIComponent(consultationId)
+                           + "/video-token", { method: "POST" });
+  room = {
+    url: token.url,
+    token: token.token,
+    room: token.room,
+    recording: token.recording
+  };
+  document.getElementById("waiting-detail").textContent =
+    "Consultation " + consultationId + ", room " + token.room
+    + (token.recording ? " — this consultation is being recorded." : "");
+  show("waiting");
+}
+
+document.getElementById("join-button").addEventListener("click", async () => {
+  if (!room) { return; }
+  const button = document.getElementById("join-button");
+  button.disabled = true;
+  try {
+    const { Room, RoomEvent } = LivekitClient;
+    const client = new Room();
+    window.room = client;                       // for the leave button
+    await client.connect(room.url, room.token);
+    client.on(RoomEvent.TrackSubscribed, (track) => {
+      const element = document.getElementById("remote");
+      track.attach(element);
+      element.play();
+    });
+    await client.localParticipant.enableCameraAndMicrophone();
+    show("call");
+  } catch (problem) {
+    document.getElementById("status").textContent = "The consultation could not be joined: "
+      + problem.message;
+    show("waiting");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById("leave-button").addEventListener("click", () => {
+  if (window.room) { window.room.disconnect(); }
+  show("waiting");
+});
+
+if (sessionToken) { askForToken().catch(() => show("signin")); }
+else { show("signin"); }
+</script>
+</body>
+</html>

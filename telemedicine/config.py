@@ -62,6 +62,14 @@ ENV_DELIVERY_INTERVAL = "TELEMEDICINE_DELIVERY_INTERVAL"
 ENV_TRANSFER_SERVICES = "TELEMEDICINE_TRANSFER_SERVICES"
 ENV_SMTP_LAWFUL_BASIS = "TELEMEDICINE_SMTP_LAWFUL_BASIS"
 ENV_SMTP_JUSTIFICATION = "TELEMEDICINE_SMTP_JUSTIFICATION"
+# ENG-019: the media server the practice runs itself, in Nigeria.
+ENV_LIVEKIT_HOST = "TELEMEDICINE_LIVEKIT_HOST"
+ENV_LIVEKIT_URL = "TELEMEDICINE_LIVEKIT_URL"
+ENV_LIVEKIT_API_KEY = "TELEMEDICINE_LIVEKIT_API_KEY"
+ENV_LIVEKIT_API_SECRET = "TELEMEDICINE_LIVEKIT_API_SECRET"
+ENV_RECORDING_ENABLED = "TELEMEDICINE_RECORDING_ENABLED"
+ENV_RECORDING_CONSENT_REQUIRED = "TELEMEDICINE_RECORDING_CONSENT_REQUIRED"
+ENV_RECORDING_BUCKET = "TELEMEDICINE_RECORDING_BUCKET"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
@@ -90,6 +98,17 @@ class Settings:
     # server. They are only needed when it is outside Nigeria.
     smtp_lawful_basis: Optional[str] = None
     smtp_justification: str = ""
+    # ENG-019: the media server. The host is the practice's own server, in
+    # Nigeria; the URL is what the browser connects to.
+    livekit_host: Optional[str] = None
+    livekit_url: Optional[str] = None
+    livekit_api_key: Optional[str] = None
+    livekit_api_secret: Optional[str] = None
+    # Recording is off by default, and needs the patient's consent even when
+    # it is on.
+    recording_enabled: bool = False
+    recording_consent_required: bool = True
+    recording_bucket: Optional[str] = None
 
     @property
     def has_database(self) -> bool:
@@ -123,6 +142,14 @@ class Settings:
             raise ValueError(
                 f"the mail server port and the delivery interval must be numbers: {error}"
             ) from error
+        livekit_host = (environment.get(ENV_LIVEKIT_HOST) or "").strip() or None
+        livekit_url = (environment.get(ENV_LIVEKIT_URL) or "").strip() or None
+        livekit_api_key = (environment.get(ENV_LIVEKIT_API_KEY) or "").strip() or None
+        livekit_api_secret = (environment.get(ENV_LIVEKIT_API_SECRET) or "").strip() or None
+        recording_bucket = (environment.get(ENV_RECORDING_BUCKET) or "").strip() or None
+        recording = (environment.get(ENV_RECORDING_ENABLED) or "").strip().lower()
+        recording_consent = (environment.get(ENV_RECORDING_CONSENT_REQUIRED)
+                             or "").strip().lower()
         transfer_services = (environment.get(ENV_TRANSFER_SERVICES) or "").strip() or None
         smtp_lawful_basis = (environment.get(ENV_SMTP_LAWFUL_BASIS) or "").strip() or None
         smtp_justification = (environment.get(ENV_SMTP_JUSTIFICATION) or "").strip()
@@ -134,7 +161,15 @@ class Settings:
                    delivery_interval=delivery_interval,
                    transfer_services=transfer_services,
                    smtp_lawful_basis=smtp_lawful_basis,
-                   smtp_justification=smtp_justification)
+                   smtp_justification=smtp_justification,
+                   livekit_host=livekit_host, livekit_url=livekit_url,
+                   livekit_api_key=livekit_api_key,
+                   livekit_api_secret=livekit_api_secret,
+                   recording_enabled=recording in ("1", "true", "yes", "on"),
+                   recording_consent_required=(recording_consent in
+                                               ("1", "true", "yes", "on")
+                                               if recording_consent else True),
+                   recording_bucket=recording_bucket)
 
     def describe(self) -> str:
         """A description of the settings, without the secret."""

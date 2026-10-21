@@ -46,6 +46,7 @@ exists; check the repository before assuming anything.
 | `docs/consent-design.md` | The consent record and the endpoints that reach it |
 | `docs/retention-design.md` | The retention policy, what is past its period, and how a record is removed |
 | `docs/transfer-design.md` | The gate on transfers out of Nigeria, and the log of transfers |
+| `docs/media-design.md` | The media server the practice runs itself, and the token that opens a consultation |
 | `docs/compliance/privacy-notice-draft.md` | The draft privacy notice, and the four optional-use consents |
 | `docs/deployment.md` | The runbook: what a deployment is, what it needs, and how to bring it up |
 | `docs/notification-design.md` | The notification outbox: the confirmations, the transport and the retry |
@@ -61,6 +62,7 @@ exists; check the repository before assuming anything.
 | `telemedicine/medications.py` | The Nigerian dispensing identity of a medicine: the brand, the NAFDAC number, and the example list |
 | `telemedicine/retention.py` | The retention policy, what is past its period, and how a record is removed |
 | `telemedicine/transfer.py` | The gate on transfers out of Nigeria: what may be sent, and where |
+| `telemedicine/livekit.py` | The access token for the media server: a JWT, signed with the standard library |
 | `config/retention_policy.yaml` | The retention policy: the periods, and the two flags that stop anything being deleted |
 | `config/external_services.yaml` | The external services, where each of them is, and the basis recorded for it |
 | `db/consent_schema.sql` | PostgreSQL DDL for the consent record — append-only, like the audit log |
@@ -74,6 +76,15 @@ exists; check the repository before assuming anything.
 | `scripts/report_breach.py` | Assembles the section 40(2) breach report from the audit log |
 | `scripts/retention.py` | The retention job: `check` reports what is past its period, `delete` removes it |
 | `scripts/audit_external_services.py` | The inventory of the external services, and whether anything was sent to them |
+| `webrtc-server/` | The media server, the TURN server, the bucket, and the client page |
+
+## Video
+
+The consultations are carried by a **media server the practice runs itself, in Nigeria** — LiveKit
+and a TURN server, in `webrtc-server/`. There is no Twilio, no Agora and no LiveKit Cloud, and the
+media never leaves the country. `POST /video/consultations/{id}/video-token` issues the token, and
+only the booked patient and the delivering clinician may have one. **Recording is off by default**,
+and it needs the patient's own consent — `consultation_recording` — even when it is on.
 
 ## Transfers out of Nigeria
 
@@ -138,7 +149,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (694 tests, 74 of them skipped without a database).
+Expected result of the test command: `OK` (722 tests, 74 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 

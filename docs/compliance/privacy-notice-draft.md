@@ -221,9 +221,31 @@ patient nothing; say how to withdraw; and be signed and dated, with a copy given
 >
 > Name: ______________________  Signature: ______________________  Date: ____________
 
+## Consent E — recording the consultation
+
+> I agree that **[the legal name of the practice]** may record my video consultation, and keep the
+> recording with my record.
+>
+> I understand that:
+> - I do not have to agree to this, and my care will not be affected if I do not;
+> - the recording is made by **[the practice's own server, in Nigeria]**, and it is not sent to
+>   another country;
+> - the recording is kept **[the period the practice has confirmed, which is not yet settled — see
+>   "How long we keep your data"]**;
+> - I can withdraw this at any time, by **[how]**, and no further recording will be made; recordings
+>   already made are **[what happens to them — say it plainly]**;
+> - **[who may see the recording: the clinicians who treat me, and nobody else]**;
+> - I can ask for a copy of it, and for it to be deleted, by **[how]**.
+>
+> Name: ______________________  Signature: ______________________  Date: ____________
+
 ---
 
 # Part three — the video consultation
+
+**[The consultation is carried by the practice's own server, in Nigeria: "Your consultation is
+held on a server that this practice runs, in Nigeria. No other company carries your picture or
+your voice."]**
 
 **[Only if a video provider other than the practice's own server is used. If the media server is run
 by the practice in Nigeria, this part is: "Your consultation is held on a server that this practice
