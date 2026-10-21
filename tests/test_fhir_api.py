@@ -78,6 +78,10 @@ class ApiTestCase(unittest.TestCase):
             self.practitioner_account, self.encounter.encounter_id,
             medication_code="AMOX-500-CAP",
             medication_display="Amoxicillin 500 mg capsule",
+            brand_name="Emoclox",
+            generic_name="Amoxicillin 500mg",
+            strength="500mg Capsules",
+            nafdac_number="A4-1234",
             dosage_text="Take one capsule by mouth three times a day for 5 days.")
 
         self.repository = FhirRepository(self.records, self.booking, self.prescriptions)
@@ -287,9 +291,20 @@ class WriteTest(ApiTestCase):
             "resourceType": "MedicationRequest",
             "status": "active",
             "intent": "order",
-            "medicationCodeableConcept": {"coding": [{
-                "system": "https://telemedicine.example.org/CodeSystem/medication",
-                "code": "AMOX-500-CAP", "display": "Amoxicillin 500 mg capsule"}]},
+            "medicationCodeableConcept": {
+                "coding": [{
+                    "system": "https://telemedicine.example.org/CodeSystem/medication",
+                    "code": "AMOX-500-CAP", "display": "Amoxicillin 500 mg capsule"},
+                    {"system": "https://www.nafdac.gov.ng/registration",
+                     "code": "A4-1234", "display": "Emoclox 500mg Capsules"}],
+                "text": "Emoclox [Amoxicillin 500mg] - NAFDAC: A4-1234"},
+            "extension": [
+                {"url": "https://telemedicine.example.org/fhir/StructureDefinition/"
+                        "medication-brand-name", "valueString": "Emoclox"},
+                {"url": "https://telemedicine.example.org/fhir/StructureDefinition/"
+                        "medication-generic-name", "valueString": "Amoxicillin 500mg"},
+                {"url": "https://telemedicine.example.org/fhir/StructureDefinition/"
+                        "medication-strength", "valueString": "500mg Capsules"}],
             "subject": {"reference": "Patient/patient-1"},
             "encounter": {"reference": f"Encounter/{self.encounter.encounter_id}"},
             "requester": {"reference": "Practitioner/practitioner-1"},
@@ -304,9 +319,20 @@ class WriteTest(ApiTestCase):
             "resourceType": "MedicationRequest",
             "status": "active",
             "intent": "order",
-            "medicationCodeableConcept": {"coding": [{
-                "system": "https://telemedicine.example.org/CodeSystem/medication",
-                "code": "AMOX-500-CAP", "display": "Amoxicillin 500 mg capsule"}]},
+            "medicationCodeableConcept": {
+                "coding": [{
+                    "system": "https://telemedicine.example.org/CodeSystem/medication",
+                    "code": "AMOX-500-CAP", "display": "Amoxicillin 500 mg capsule"},
+                    {"system": "https://www.nafdac.gov.ng/registration",
+                     "code": "A4-1234", "display": "Emoclox 500mg Capsules"}],
+                "text": "Emoclox [Amoxicillin 500mg] - NAFDAC: A4-1234"},
+            "extension": [
+                {"url": "https://telemedicine.example.org/fhir/StructureDefinition/"
+                        "medication-brand-name", "valueString": "Emoclox"},
+                {"url": "https://telemedicine.example.org/fhir/StructureDefinition/"
+                        "medication-generic-name", "valueString": "Amoxicillin 500mg"},
+                {"url": "https://telemedicine.example.org/fhir/StructureDefinition/"
+                        "medication-strength", "valueString": "500mg Capsules"}],
             "subject": {"reference": "Patient/patient-1"},
             "encounter": {"reference": f"Encounter/{self.encounter.encounter_id}"},
             "requester": {"reference": "Practitioner/practitioner-1"},

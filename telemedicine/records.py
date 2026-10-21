@@ -24,6 +24,7 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 from telemedicine.audit import OUTCOME_DENIED, OUTCOME_SUCCESS, AuditLog
 from telemedicine.authorization import AccessScope, Action, Authorizer, ResourceType
 from telemedicine.errors import AuthorizationError, ValidationError
+from telemedicine.medications import validate_dispensing_identity
 from telemedicine.models import Role, UserAccount
 from telemedicine.repositories import ClinicalRepository, InMemoryClinicalRepository
 
@@ -151,6 +152,13 @@ class Prescription:
     dose_quantity: Optional[float] = None
     dose_unit: Optional[str] = None
     duration_days: Optional[int] = None
+    # Added by ENG-016: the Nigerian dispensing identity. A pharmacy
+    # dispenses by the brand and the NAFDAC registration number; the code
+    # above is what the safety checks work on. Both are needed.
+    brand_name: str = ""
+    generic_name: str = ""
+    strength: Optional[str] = None
+    nafdac_number: str = ""
 
 
 class RecordsService:
@@ -435,6 +443,8 @@ class RecordsService:
     def issue_prescription(self, actor: UserAccount, encounter_id: str, *,
                            medication_code: str, medication_display: str,
                            dosage_text: str,
+                           brand_name: str, generic_name: str, nafdac_number: str,
+                           strength: Optional[str] = None,
                            authored_on: Optional[datetime] = None,
                            **details) -> Prescription:
         """Issue a prescription against an encounter.
@@ -447,13 +457,15 @@ class RecordsService:
         that was created. A refused attempt identifies the encounter it was
         refused for, because no prescription exists to point at; both
         entries name the encounter in their detail.
+
+        **The Nigerian dispensing identity is required** (ENG-016): the
+        brand name, the generic name and the NAFDAC registration number. A
+        prescription without them cannot be dispensed, so it is refused here
+        rather than issued and found out at the pharmacy counter.
         """
         encounter = self.repository.get_encounter(encounter_id)
         if encounter is None:
             raise ValidationError(f"no encounter with id '{encounter_id}'")
-        if not medication_code or not medication_display or not dosage_text:
-            raise ValidationError(
-                "a prescription needs a medication code, a display name and dosage text")
         scope = self._encounter_scope(encounter)
         decision = self.authorizer.decide(actor, Action.CREATE,
                                            ResourceType.MEDICATION_REQUEST, scope)
@@ -475,6 +487,20 @@ class RecordsService:
                 action=Action.CREATE.value,
             )
 
+        # The content is checked after the authorization, so that a refused
+        # attempt is audited as a refusal whatever the body said.
+        if not medication_code or not medication_display or not dosage_text:
+            raise ValidationError(
+                "a prescription needs a medication code, a display name and dosage text")
+        if not generic_name or not str(generic_name).strip():
+            raise ValidationError(
+                "a prescription needs the generic name of the medicine, so that the "
+                "patient and the pharmacist know what is being dispensed")
+        # The brand and the registration number are checked together, and the
+        # number is checked for its shape: a number that could not be right
+        # is worse than no number, because it looks right.
+        nafdac_number = validate_dispensing_identity(brand_name, nafdac_number)
+
         prescription = Prescription(
             prescription_id=str(uuid.uuid4()),
             encounter_id=encounter.encounter_id,
@@ -486,6 +512,10 @@ class RecordsService:
             medication_code=medication_code,
             medication_display=medication_display,
             dosage_text=dosage_text,
+            brand_name=str(brand_name).strip(),
+            generic_name=str(generic_name).strip(),
+            strength=str(strength).strip() if strength else None,
+            nafdac_number=nafdac_number,
             authored_on=authored_on or datetime.now(timezone.utc),
             **details,
         )

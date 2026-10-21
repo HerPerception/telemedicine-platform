@@ -101,6 +101,10 @@ def prescription_record():
         medication_system="https://telemedicine.example.org/CodeSystem/medication",
         medication_code="AMOX-500-CAP",
         medication_display="Amoxicillin 500 mg capsule",
+        brand_name="Emoclox",
+        generic_name="Amoxicillin 500mg",
+        strength="500mg Capsules",
+        nafdac_number="A4-1234",
         dosage_text="Take one capsule by mouth three times a day for 5 days.",
         status="active",
         authored_on=NOW,
@@ -197,6 +201,49 @@ class SerializationTest(unittest.TestCase):
         self.assertEqual(resource["dispenseRequest"]["numberOfRepeatsAllowed"], 0)
         self.assertEqual(resource["dispenseRequest"]["quantity"]["value"], 15)
         self.assertEqual(resource["note"][0]["text"], "Take with food.")
+
+    def test_the_prescription_carries_the_nigerian_dispensing_identity(self):
+        """ENG-016: two codings, the text, and the extensions."""
+        resource = serialization.medication_request_resource(prescription_record())
+        concept = resource["medicationCodeableConcept"]
+
+        # The coded concept comes first, so a client that reads the first
+        # coding reads what it read before.
+        self.assertEqual(concept["coding"][0]["code"], "AMOX-500-CAP")
+
+        # The registration number comes second.
+        nafdac = concept["coding"][1]
+        self.assertEqual(nafdac["system"], "https://www.nafdac.gov.ng/registration")
+        self.assertEqual(nafdac["code"], "A4-1234")
+        self.assertEqual(nafdac["display"], "Emoclox 500mg Capsules")
+
+        # The text says all three things.
+        self.assertEqual(concept["text"],
+                         "Emoclox [Amoxicillin 500mg] - NAFDAC: A4-1234")
+
+        # And the structured values are carried as extensions.
+        extensions = {extension["url"]: extension["valueString"]
+                      for extension in resource["extension"]}
+        self.assertEqual(extensions[
+            "https://telemedicine.example.org/fhir/StructureDefinition/medication-brand-name"],
+            "Emoclox")
+        self.assertEqual(extensions[
+            "https://telemedicine.example.org/fhir/StructureDefinition/medication-generic-name"],
+            "Amoxicillin 500mg")
+        self.assertEqual(extensions[
+            "https://telemedicine.example.org/fhir/StructureDefinition/medication-strength"],
+            "500mg Capsules")
+
+    def test_a_prescription_from_before_the_requirement_still_reads(self):
+        """The resource of a row that has no brand or number is still valid."""
+        import dataclasses
+        legacy = dataclasses.replace(prescription_record(), brand_name="",
+                                     generic_name="", nafdac_number="")
+        resource = serialization.medication_request_resource(legacy)
+        concept = resource["medicationCodeableConcept"]
+        self.assertEqual(len(concept["coding"]), 1)
+        self.assertEqual(concept["text"], "Amoxicillin 500 mg capsule")
+        self.assertEqual(validate_resource(resource, source="MedicationRequest"), [])
 
     def test_the_operation_outcome_has_the_shape_fhir_expects(self):
         outcome = serialization.operation_outcome("error", "forbidden", "not for you")

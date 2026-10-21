@@ -22,11 +22,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from telemedicine.audit import OUTCOME_DENIED, OUTCOME_ERROR, OUTCOME_SUCCESS, AuditLog
 from telemedicine.authorization import Action, ResourceType
 from telemedicine.errors import AuthorizationError, ValidationError
+from telemedicine.medications import validate_dispensing_identity
 from telemedicine.models import UserAccount
 from telemedicine.records import PatientRecord, PractitionerRecord, Prescription, RecordsService
 
@@ -93,7 +94,23 @@ def _escape_pdf_text(text: str) -> str:
     return "".join(out)
 
 
-def render_pdf(lines: List[str]) -> bytes:
+@dataclass(frozen=True)
+class PdfLine:
+    """One line of a document, with the style it is printed in.
+
+    The prescription prints the medicine large and bold, because a pharmacist
+    has to read the right product off the page without hunting for it, and
+    the brand and the registration number are what they read it by.
+    """
+
+    text: str
+    size: int = 11
+    bold: bool = False
+    # Points of space above the line.
+    space_before: int = 0
+
+
+def render_pdf(lines: List[Union[str, PdfLine]]) -> bytes:
     """Render a list of text lines as a single-page PDF.
 
     The output is a minimal but well-formed PDF 1.4 file: a catalog, a page
@@ -101,12 +118,23 @@ def render_pdf(lines: List[str]) -> bytes:
     cross-reference table and a trailer. Text is written uncompressed, which
     keeps the file readable and lets a test assert on its contents.
 
+    A line may be a plain string, or a :class:`PdfLine` when it is to be
+    printed large or in bold. The bold face is Helvetica-Bold, and it is
+    only put in the page's resources when a line uses it.
+
     This is a deliberately small renderer: it does one thing, with no
     dependency on a PDF library.
     """
+    styled = [line if isinstance(line, PdfLine) else PdfLine(str(line)) for line in lines]
+    bold_used = any(line.bold for line in styled)
+
     content_lines = ["BT", "/F1 11 Tf", "1 0 0 1 56 786 Tm", "14 TL"]
-    for line in lines:
-        content_lines.append("(%s) Tj" % _escape_pdf_text(line))
+    for line in styled:
+        if line.space_before:
+            content_lines.append("0 -%d Td" % line.space_before)
+        content_lines.append("%s %d Tf" % ("/F2" if line.bold else "/F1", line.size))
+        content_lines.append("%d TL" % int(round(line.size * 1.3)))
+        content_lines.append("(%s) Tj" % _escape_pdf_text(line.text))
         content_lines.append("T*")
     content_lines.append("ET")
     content = "\n".join(content_lines).encode("latin-1", "replace")
@@ -115,11 +143,17 @@ def render_pdf(lines: List[str]) -> bytes:
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
-        b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"/Resources << /Font << /F1 5 0 R"
+        + (b" /F2 6 0 R" if bold_used else b"")
+        + b" >> >> /Contents 4 0 R >>",
         b"<< /Length " + str(len(content)).encode("ascii") + b" >>\nstream\n"
         + content + b"\nendstream",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     ]
+    if bold_used:
+        objects.append(
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold "
+            b"/Encoding /WinAnsiEncoding >>")
 
     out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     offsets: List[int] = []
@@ -188,16 +222,29 @@ class DocumentStore:
 
 def prescription_document_lines(prescription: Prescription, *, patient: Optional[PatientRecord],
                                 practitioner: Optional[PractitionerRecord],
-                                issued_at: datetime) -> List[str]:
+                                issued_at: datetime) -> List[Union[str, PdfLine]]:
     """The lines of the prescription document.
 
     The document states who prescribed what, to whom, and when, and it says
     plainly that it is a record of the prescription rather than the
     prescription itself.
+
+    **The medicine is printed the way a pharmacy needs it** (ENG-016): the
+    brand and the strength large and bold, the generic name in brackets
+    under it, and the NAFDAC registration number under that. A prescription
+    without a brand or without a registration number is not printed at all —
+    a pharmacy cannot dispense it, and a document that looks like a
+    prescription is worse than an error.
     """
+    # The brand and the registration number are checked before anything is
+    # drawn, so that a document is never half a prescription.
+    validate_dispensing_identity(prescription.brand_name, prescription.nafdac_number)
+
     patient_name = patient.display_name if patient else "the patient"
     practitioner_name = practitioner.display_name if practitioner else "the clinician"
     identifier = practitioner.identifier if practitioner and practitioner.identifier else ""
+    headline = (f"{prescription.brand_name} {prescription.strength}".strip()
+                if prescription.strength else prescription.brand_name)
     return [
         "E-PRESCRIPTION",
         "",
@@ -208,11 +255,14 @@ def prescription_document_lines(prescription: Prescription, *, patient: Optional
         "Patient: %s" % patient_name,
         "Prescriber: %s%s" % (practitioner_name, f" ({identifier})" if identifier else ""),
         "",
-        "Medication: %s" % prescription.medication_display,
-        "Medication code: %s" % prescription.medication_code,
-        "Catalogue: %s" % prescription.medication_system,
+        PdfLine(headline, size=16, bold=True, space_before=6),
+        "[%s]" % prescription.generic_name,
+        "NAFDAC REG NO: %s" % prescription.nafdac_number,
         "",
         "Directions: %s" % prescription.dosage_text,
+        "",
+        "Medication code: %s" % prescription.medication_code,
+        "Catalogue: %s" % prescription.medication_system,
         "",
         "This document is the record of the prescription issued during the",
         "telemedicine consultation. It is not a substitute for the medication",

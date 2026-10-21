@@ -87,6 +87,13 @@ than distorting an existing element, the note is carried in one extension:
 | Extension URL | Value type | Used on | Meaning |
 | --- | --- | --- | --- |
 | `https://telemedicine.example.org/fhir/StructureDefinition/encounter-clinical-note` | `valueString` | `Encounter` | The clinician's free-text note for the visit |
+| `https://telemedicine.example.org/fhir/StructureDefinition/medication-brand-name` | `valueString` | `MedicationRequest` | The brand the product is sold under, as a Nigerian pharmacy dispenses it (ENG-016) |
+| `https://telemedicine.example.org/fhir/StructureDefinition/medication-generic-name` | `valueString` | `MedicationRequest` | The generic name and the strength, in brackets in the text (ENG-016) |
+| `https://telemedicine.example.org/fhir/StructureDefinition/medication-strength` | `valueString` | `MedicationRequest` | The strength and the presentation: "500mg Capsules" (ENG-016) |
+
+R4 has no element for the brand a product is sold under, or for the registration number the
+regulator gave it. They are carried as extensions rather than parsed out of the human-readable
+text, so that a client sends and receives them without having to take them apart.
 
 `Encounter.reasonCode.text` carries the patient's presenting complaint, which is a coded reason
 rather than a note, so it is not reused for this purpose.
@@ -204,7 +211,7 @@ Source: `medication_request` table. Target: `MedicationRequest` (R4 4.0.1).
 | `MedicationRequest.status` | **1..1** | `medication_request.status` | Bound *required* to `medicationrequest-status` |
 | `MedicationRequest.intent` | **1..1** | `medication_request.intent` | Bound *required* to `medicationrequest-intent`; `order` by default |
 | `MedicationRequest.category` | 0..* | — | Not populated; `medicationrequest-category` is *example*-bound |
-| `MedicationRequest.medication[x]` | **1..1** | `medication_request.medication_system`, `medication_code`, `medication_display` | Sent as `medicationCodeableConcept` with one `Coding` |
+| `MedicationRequest.medication[x]` | **1..1** | `medication_request.medication_system`, `medication_code`, `medication_display`, `brand_name`, `generic_name`, `strength`, `nafdac_number` | Sent as `medicationCodeableConcept` with two `Coding`s — the coded concept first, the NAFDAC registration number second — and the text |
 | `MedicationRequest.subject` | **1..1** | `medication_request.patient_id` | Reference to `Patient` |
 | `MedicationRequest.encounter` | 0..1 | `medication_request.encounter_id` | Reference to `Encounter`; this profile requires it |
 | `MedicationRequest.authoredOn` | 0..1 | `medication_request.authored_on` | `dateTime` |
@@ -227,15 +234,36 @@ system).
 | `dosageInstruction[0].doseAndRate[0].doseQuantity` | `dose_quantity`, `dose_unit` | `Quantity` with UCUM unit |
 | `dosageInstruction[0].timing.repeat.boundsDuration` | `duration_days` | `Duration`, e.g. `10 days` |
 
-### Medication terminology — open item
+### Medication terminology — the Nigerian dispensing identity (ENG-016)
 
-The MVP has no pharmacy or eRx integration (explicitly out of scope in the README) and ENG-001 has
-no verified drug terminology to draw on. Rather than assert RxNorm codes that have not been checked
-against the terminology server, `medicationCodeableConcept` uses the local code system
-`https://telemedicine.example.org/CodeSystem/medication`. OPS-001 must confirm whether the target
-jurisdiction requires a national drug code before any real prescription is issued.
+`medicationCodeableConcept` carries **two codings**.
+
+The **first** is the coded concept the safety checks work on — the interaction check, the allergy
+check, the duplicate-therapy check — and it is still the local code system
+`https://telemedicine.example.org/CodeSystem/medication`. It is first so that a client that reads
+the first coding reads what it read before.
+
+The **second** is the NAFDAC registration number, in the code system
+`https://www.nafdac.gov.ng/registration`. A pharmacy in Nigeria dispenses by the brand and the
+registration number; a prescription that carries only a coded concept cannot be dispensed.
+
+The **text** is what a person reads, and it says all three things:
+
+    Emoclox [Amoxicillin 500mg] - NAFDAC: A4-1234
+
+**What is still open.** Nigeria has no national medication terminology server yet — the Nigeria
+Core FHIR Implementation Guide says the national terminology service is "not yet available, but
+planning is underway" — so the coded concept is still the practice's own code system, and a real
+prescription has to carry a code that has been checked against something. The statutory list of
+medicines is the **Essential Drugs List** under section 39 of the National Health Act 2014, and
+whether a medicine is on it is a check the practice's catalogue has to make; it is not built.
+See `docs/compliance/nigeria.md` §6.
 
 ## 8. Value sets and code systems used
+
+The code systems that are not value sets: the local medication catalogue
+`https://telemedicine.example.org/CodeSystem/medication`, and the NAFDAC registration scheme
+`https://www.nafdac.gov.ng/registration` (ENG-016).
 
 The R4 value sets are *composed* from FHIR's own code systems. The table below lists the value set,
 the code system the codes come from, the binding strength declared in the R4 StructureDefinition,

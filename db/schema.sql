@@ -262,6 +262,24 @@ CREATE TABLE IF NOT EXISTS medication_request (
     medication_system   text        NOT NULL,
     medication_code     text        NOT NULL,
     medication_display  text        NOT NULL,
+    -- Nigerian pharmacy dispensing identity (ENG-016).
+    --
+    -- A pharmacy in Nigeria dispenses by the brand and the NAFDAC
+    -- registration number; the code above is what the safety checks work
+    -- on. Both are needed, and neither replaces the other: a coded concept
+    -- without the dispensing identity is a prescription that cannot be
+    -- filled, and the dispensing identity without a coded concept is a
+    -- medicine that nothing can check.
+    --
+    -- The NAFDAC number has a shape -- an optional A or B, the applicant's
+    -- number, a hyphen, and the product's number: A4-1234, 04-8805,
+    -- B11-1234 -- and the database refuses one that does not have it.
+    brand_name           text        NOT NULL CHECK (brand_name <> ''),
+    generic_name         text        NOT NULL CHECK (generic_name <> ''),
+    -- The strength and the presentation: "500mg Capsules". It is part of
+    -- the headline on the document, and it is not separately required.
+    strength             text,
+    nafdac_number        text        NOT NULL,
     authored_on         timestamptz NOT NULL,
     -- Human-readable directions -> MedicationRequest.dosageInstruction.text.
     dosage_text         text        NOT NULL,
@@ -276,6 +294,10 @@ CREATE TABLE IF NOT EXISTS medication_request (
     notes               text,
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
+    -- The shape of the NAFDAC registration number. A number that could not
+    -- be right is worse than no number, because it looks right.
+    CONSTRAINT medication_request_nafdac_format
+        CHECK (nafdac_number ~ '^(A|B)?[0-9]+-[0-9]{3,6}$'),
     -- The prescription must belong to the same patient and prescriber as the
     -- encounter it was issued during.
     CONSTRAINT medication_request_encounter_match
@@ -288,6 +310,33 @@ CREATE INDEX IF NOT EXISTS medication_request_patient_authored
     ON medication_request (patient_id, authored_on);
 CREATE INDEX IF NOT EXISTS medication_request_encounter ON medication_request (encounter_id);
 CREATE INDEX IF NOT EXISTS medication_request_prescriber ON medication_request (prescriber_id);
+
+-- A table created before the Nigerian dispensing identity existed gets the
+-- columns here, so that re-running this file upgrades it rather than doing
+-- nothing. The rows that predate the requirement keep their NULLs: they
+-- cannot be printed, because the document refuses a prescription without a
+-- brand and a NAFDAC number, and no new one can be issued without them.
+ALTER TABLE medication_request ADD COLUMN IF NOT EXISTS brand_name text;
+ALTER TABLE medication_request ADD COLUMN IF NOT EXISTS generic_name text;
+ALTER TABLE medication_request ADD COLUMN IF NOT EXISTS strength text;
+ALTER TABLE medication_request ADD COLUMN IF NOT EXISTS nafdac_number text;
+
+-- The format of the registration number is enforced on the rows written
+-- after this file was applied. The constraint is added NOT VALID, so that
+-- the rows that predate it are not rejected by the upgrade; it is checked
+-- from then on.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'medication_request_nafdac_format'
+          AND conrelid = 'medication_request'::regclass) THEN
+        ALTER TABLE medication_request
+            ADD CONSTRAINT medication_request_nafdac_format
+            CHECK (nafdac_number ~ '^(A|B)?[0-9]+-[0-9]{3,6}$') NOT VALID;
+    END IF;
+END
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Comments on maintenance behaviour.

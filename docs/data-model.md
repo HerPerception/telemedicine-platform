@@ -255,6 +255,10 @@ Maps to `MedicationRequest`. The e-prescription.
 | `medication_system` | `text` | no | Local catalogue URI | `MedicationRequest.medicationCodeableConcept.coding.system` |
 | `medication_code` | `text` | no | | `MedicationRequest.medicationCodeableConcept.coding.code` |
 | `medication_display` | `text` | no | | `MedicationRequest.medicationCodeableConcept.coding.display` |
+| `brand_name` | `text` | no | The brand the product is sold under | `MedicationRequest.extension` `…/medication-brand-name` |
+| `generic_name` | `text` | no | The generic name and the strength | `MedicationRequest.extension` `…/medication-generic-name` |
+| `strength` | `text` | yes | The strength and the presentation: "500mg Capsules" | `MedicationRequest.extension` `…/medication-strength` |
+| `nafdac_number` | `text` | no | The NAFDAC registration number: `A4-1234` | `MedicationRequest.medicationCodeableConcept.coding[1]` (`system = https://www.nafdac.gov.ng/registration`) |
 | `authored_on` | `timestamptz` | no | | `MedicationRequest.authoredOn` |
 | `dosage_text` | `text` | no | Directions in prose | `MedicationRequest.dosageInstruction[0].text` |
 | `dose_quantity`, `dose_unit` | `numeric(10,3)`, `text` | yes | | `MedicationRequest.dosageInstruction[0].doseAndRate[0].doseQuantity` |
@@ -274,6 +278,15 @@ Maps to `MedicationRequest`. The e-prescription.
   other national drug code is asserted in ENG-001: the MVP has no pharmacy integration, and
   inventing drug codes would be unverified. The mapping document records this as an open item for
   OPS-001.
+- **`brand_name`, `generic_name` and `nafdac_number` are required** (ENG-016). A pharmacy in
+  Nigeria dispenses by the brand and the NAFDAC registration number, and a prescription without
+  them cannot be dispensed; the document is refused rather than printed without them. The
+  registration number has a shape — an optional `A` or `B`, the applicant's number, a hyphen, and
+  the product's number — and the database refuses one that does not have it: `A4-1234`, `04-8805`,
+  `B11-1234`.
+- The coded concept and the dispensing identity are different things and neither replaces the
+  other: the code is what the interaction and allergy checks work on, and the brand and the
+  registration number are what the pharmacy dispenses on.
 
 ## 5. Cross-cutting rules
 

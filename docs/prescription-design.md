@@ -73,6 +73,20 @@ patient, the prescriber (with their identifier), the medication, the medication 
 and the directions. It says plainly that it is the record of the prescription issued during the
 consultation, and that it is issued to the patient named above only.
 
+**The medicine is printed the way a Nigerian pharmacy reads it** (ENG-016):
+
+```
+Emoclox 500mg Capsules        <- the brand and the strength, large and bold
+[Amoxicillin 500mg]           <- the generic name
+NAFDAC REG NO: A4-1234        <- the registration number
+```
+
+A pharmacy dispenses by the brand and the NAFDAC registration number, so those are what the
+document is read by; the coded concept is printed underneath, for the checks. **A prescription
+without a brand or without a registration number is not printed at all** — the refusal is
+"Cannot print: missing brand or NAFDAC per Nigerian pharmacy requirement", and the same message
+is used whichever of the two is missing, so that nobody is left guessing which field was left out.
+
 **The document is a snapshot.** A later status change does not rewrite it, and the schema refuses an
 `UPDATE` on the document row. A prescription that has been printed and handed to a pharmacy must not
 be able to change afterwards; the current status is in the prescription record, and the document
@@ -136,8 +150,12 @@ Recorded in `multi-agent-orchestrator/resolution.md` and in §6 above.
    storage; the schema models the metadata and a `storage_key` for it, but nothing fills that in.
 2. **No encryption.** Encryption at rest and the key management around it are OPS-001 work. The
    document is a health record and must not be stored unencrypted in a deployment.
-3. **No pharmacy integration.** Out of scope by the README, and it is why the medication catalogue
-   is local.
+3. **No pharmacy integration.** Out of scope by the README: the prescription is a document that
+   the patient carries to the pharmacy, not a message to one. The medication catalogue is still
+   local, because Nigeria has no national medication terminology server yet — the Nigeria Core
+   FHIR Implementation Guide says the national terminology service is "not yet available, but
+   planning is underway". The NAFDAC registration number is the local identity, and it is carried
+   (ENG-016).
 4. **The document has no signature.** A printed prescription cannot be verified as genuine. For a
    practice where a pharmacist must trust it, that matters; a signature is out of scope here and
    should be an OPS-001 decision.

@@ -119,6 +119,39 @@ class SchemaStructureTest(unittest.TestCase):
                 pattern = rf"(?s){column}\s+text\s+NOT NULL.*?CHECK"
                 self.assertRegex(body, pattern)
 
+    def test_the_prescription_carries_the_nigerian_dispensing_identity(self):
+        """ENG-016: the brand, the generic name and the NAFDAC number."""
+        body = "\n".join(self.tables["medication_request"])
+        for column in ("brand_name", "generic_name", "strength", "nafdac_number"):
+            with self.subTest(column=column):
+                self.assertIn(column, body)
+
+    def test_the_brand_and_the_generic_name_are_required(self):
+        body = "\n".join(self.tables["medication_request"])
+        self.assertRegex(body, r"brand_name\s+text\s+NOT NULL")
+        self.assertRegex(body, r"generic_name\s+text\s+NOT NULL")
+
+    def test_the_nafdac_number_is_required(self):
+        body = "\n".join(self.tables["medication_request"])
+        self.assertRegex(body, r"nafdac_number\s+text\s+NOT NULL")
+
+    def test_the_database_refuses_a_nafdac_number_of_the_wrong_shape(self):
+        body = "\n".join(self.tables["medication_request"])
+        self.assertIn("nafdac_number ~ '^(A|B)?[0-9]+-[0-9]{3,6}$'", body)
+
+    def test_a_table_created_before_the_requirement_is_upgraded(self):
+        # The file has to work on a database that already has prescriptions
+        # in it, so the columns are added and the constraint is added
+        # NOT VALID: the rows that predate it are not rejected, and the rows
+        # written after it are.
+        clean = self.clean
+        for column in ("brand_name", "generic_name", "strength", "nafdac_number"):
+            with self.subTest(column=column):
+                self.assertIn(
+                    f"ALTER TABLE medication_request ADD COLUMN IF NOT EXISTS {column}",
+                    clean)
+        self.assertIn("NOT VALID", clean)
+
     def test_gen_random_uuid_is_available(self):
         self.assertIn("gen_random_uuid()", self.clean)
         self.assertIn("CREATE EXTENSION IF NOT EXISTS btree_gist", self.clean)
