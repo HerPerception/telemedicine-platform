@@ -15,6 +15,14 @@ project gains no dependency for it.
 sent, and a process that dies in between sends it again. A transport
 therefore has to be willing to send the same message twice, which a
 confirmation is.
+
+**Nothing leaves Nigeria without a reason.** A message about a consultation is
+health data, and the mail server may be in another country. So the transport
+asks the :class:`~telemedicine.transfer.OutboundGuard` before it connects: a
+transfer out of Nigeria needs a lawful basis under section 43 of the Nigeria
+Data Protection Act 2023 and a written justification, and the guard refuses
+the request without them and says which one is missing. A mail server in
+Nigeria needs neither.
 """
 
 from __future__ import annotations
@@ -31,6 +39,7 @@ from telemedicine.notifications import (
     NotificationTransport,
     DeliveryReport,
 )
+from telemedicine.transfer import OutboundGuard, TransferRequest
 
 
 class AddressDirectory:
@@ -56,7 +65,10 @@ class SmtpTransport(NotificationTransport):
     def __init__(self, directory: Callable[[str], Optional[str]], host: str,
                  port: int = 25, sender: str = "telemedicine@localhost",
                  username: Optional[str] = None, password: Optional[str] = None,
-                 start_tls: bool = False, timeout: int = 30):
+                 start_tls: bool = False, timeout: int = 30,
+                 guard: Optional[OutboundGuard] = None,
+                 lawful_basis: Optional[str] = None,
+                 justification: str = ""):
         self.directory = directory
         self.host = host
         self.port = port
@@ -65,12 +77,22 @@ class SmtpTransport(NotificationTransport):
         self.password = password
         self.start_tls = start_tls
         self.timeout = timeout
+        # The gate on transfers out of Nigeria. Without one, the transport
+        # sends to wherever it is told to; a deployment wires one in.
+        self.guard = guard
+        # The basis and the justification for sending health data to this
+        # mail server. They are only needed when the server is outside
+        # Nigeria.
+        self.lawful_basis = lawful_basis
+        self.justification = justification
 
     def send(self, notification: Notification) -> None:
         address = self.directory(notification.recipient_user_id)
         if not address:
             raise RuntimeError(
                 f"the account {notification.recipient_user_id} has no address to send to")
+        # Before anything is sent, the gate decides whether it may be.
+        self.check_transfer(notification, address)
         message = self.build(notification, address)
         with smtplib.SMTP(self.host, self.port, timeout=self.timeout) as client:
             if self.start_tls:
@@ -78,6 +100,27 @@ class SmtpTransport(NotificationTransport):
             if self.username:
                 client.login(self.username, self.password or "")
             client.send_message(message)
+
+    def check_transfer(self, notification: Notification, address: str) -> None:
+        """Ask the gate whether this message may leave the country.
+
+        Nothing is sent when the gate refuses, and the refusal says which
+        of the two things is missing.
+        """
+        if self.guard is None:
+            return
+        self.guard.permit(
+            TransferRequest(
+                destination_country="",
+                recipient=address,
+                data_categories=[notification.kind],
+                lawful_basis=self.lawful_basis,
+                justification_text=self.justification,
+            ),
+            host=self.host,
+            service="smtp",
+            user_id=notification.recipient_user_id,
+        )
 
     def build(self, notification: Notification, address: str) -> EmailMessage:
         """The message that would be sent. Kept apart so that it can be read."""

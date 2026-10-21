@@ -1,0 +1,113 @@
+# The external services the application may send to, and where each of them is.
+#
+# TODO_LEGAL - the justifications are empty until the practice's adviser
+# confirms them, and every service outside Nigeria is therefore BLOCKED.
+#
+# Section 41(1) of the Nigeria Data Protection Act 2023 forbids transferring
+# personal data from Nigeria to another country unless the recipient has an
+# adequate level of protection, or one of the conditions in section 43
+# applies. Section 41(2) requires the basis for the transfer to be recorded.
+# Section 43(a) is the patient's consent, given after being informed of the
+# risks of the transfer.
+#
+# So a service outside Nigeria needs, before anything may be sent to it:
+#
+#   lawful_basis:   consent | contract | vital_interest | public_interest |
+#                   legal_claim
+#   justification:  what the transfer is for, in the practice's own words
+#
+# **While the justification is empty, the service is blocked**, and the
+# request is refused with "Transfer blocked: no lawful basis recorded per
+# NDPA s43" or "Transfer blocked: no justification recorded per NDPA s41(2)".
+#
+# An example of a filled-in entry, from the practice's own words:
+#
+#   sendgrid.lawful_basis: consent
+#   sendgrid.justification: Patient consented to email receipts, see consent ID
+#
+# The services below are listed by their API host. A destination that is not
+# listed at all is refused as well: it cannot be shown to be in Nigeria, and
+# showing it is the whole point. The practice's own services — its mail
+# server, its media server — are listed here too, with `country: NG`, and a
+# transfer to one of them is not a transfer at all.
+#
+# Run `python3 scripts/audit_external_services.py` to see the list, where each
+# service is, and whether anything has been sent to it.
+
+# --- email ---------------------------------------------------------------
+# Both of these are in the United States. A receipt about a consultation is
+# health data, so a transfer to either of them is a transfer out of Nigeria.
+
+sendgrid.host: api.sendgrid.com
+sendgrid.country: US
+sendgrid.lawful_basis:
+sendgrid.justification:
+
+mailgun.host: api.mailgun.net
+mailgun.country: US
+mailgun.lawful_basis:
+mailgun.justification:
+
+postmark.host: api.postmarkapp.com
+postmark.country: US
+postmark.lawful_basis:
+postmark.justification:
+
+# --- messaging -----------------------------------------------------------
+
+twilio.host: api.twilio.com
+twilio.country: US
+twilio.lawful_basis:
+twilio.justification:
+
+# --- video ---------------------------------------------------------------
+# The media server is the one the practice runs itself, in Nigeria. A
+# managed service in another country is a transfer of the patient's picture
+# and voice, and it is refused until a basis and a justification are
+# recorded here. See docs/compliance/nigeria.md section 7.
+
+daily.host: api.daily.co
+daily.country: US
+daily.lawful_basis:
+daily.justification:
+
+livekit.host: api.livekit.io
+livekit.country: US
+livekit.lawful_basis:
+livekit.justification:
+
+zoom.host: api.zoom.us
+zoom.country: US
+zoom.lawful_basis:
+zoom.justification:
+
+# --- hosting and storage -------------------------------------------------
+
+aws.host: amazonaws.com
+aws.country: US
+aws.lawful_basis:
+aws.justification:
+
+# --- push notifications and sign-in --------------------------------------
+
+firebase.host: firebase.google.com
+firebase.country: US
+firebase.lawful_basis:
+firebase.justification:
+
+# --- artificial intelligence ---------------------------------------------
+
+openai.host: api.openai.com
+openai.country: US
+openai.lawful_basis:
+openai.justification:
+
+# --- the practice's own services -----------------------------------------
+# These are the ones that are in Nigeria, so nothing leaves the country.
+# Add the practice's own hosts here when they are known; a transfer to a
+# host that is not listed is refused.
+
+# practice_mail.host: smtp.example.ng
+# practice_mail.country: NG
+# practice_media.host: media.example.ng
+# practice_media.country: NG

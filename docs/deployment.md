@@ -42,6 +42,9 @@ never written anywhere.
 | `TELEMEDICINE_SMTP_PASSWORD` | Its password | None. It is read from the environment and written nowhere: not to the log, not to the audit trail, not to the outbox, not into the message |
 | `TELEMEDICINE_SMTP_TLS` | Whether to start TLS | `true` |
 | `TELEMEDICINE_DELIVERY_INTERVAL` | How long the worker waits between passes | `30` seconds |
+| `TELEMEDICINE_TRANSFER_SERVICES` | Where the external services are described — which country each is in, and the basis and justification recorded for it | `config/external_services.yaml` |
+| `TELEMEDICINE_SMTP_LAWFUL_BASIS` | The basis for sending health data to the mail server, when it is outside Nigeria: `consent`, `contract`, `vital_interest`, `public_interest` or `legal_claim` | none — and without it, a mail server outside Nigeria is **refused** |
+| `TELEMEDICINE_SMTP_JUSTIFICATION` | What the transfer is for, in the practice's own words | none — and without it, a mail server outside Nigeria is **refused** |
 
 ## 3. Bringing it up
 

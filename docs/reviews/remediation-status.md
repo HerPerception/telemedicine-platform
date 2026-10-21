@@ -18,11 +18,11 @@ documented; only because it is done.
 | Privacy | 9 | 4 | 3 | 2 |
 | Security | 18 | 8 | 0 | 10 |
 | Accessibility | 4 | 0 | 1 | 3 |
-| Regulatory | 12 | 4 | 2 | 6 |
-| **Total** | **43** | **16** | **6** | **21** |
+| Regulatory | 13 | 5 | 2 | 6 |
+| **Total** | **44** | **17** | **6** | **21** |
 
-The review found 37 issues; four more were found while the work was being done, and are marked
-*(new)* in the tables below. The counts here are of all 43.
+The review found 37 issues; seven more were found while the work was being done, and are marked
+*(new)* in the tables below. The counts here are of all 44.
 
 The sign-off conditions of §8 of the review are listed at the end, with their state.
 
@@ -86,7 +86,8 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | REG-08 HIPAA has not been addressed | Medium | **closed** | Not applicable: the practice and its patients are in Nigeria, and the United States' regime does not reach them. The applicable regime is the NDPA 2023 and the National Health Act 2014. This closes only for as long as every patient is in Nigeria |
 | REG-09 GDPR has not been addressed | Medium | **closed** | Not applicable, for the same reason as REG-08. A patient who is in the European Economic Area, or a provider whose servers are, brings the question back — which is why the media server is to be run in Nigeria (`docs/compliance/nigeria.md` §7) |
 | REG-10 The single-clinician assumption | Low | open | A third role, and the access review that goes with it |
-| *(new)* A media provider outside Nigeria would be an unlawful transfer | — | partly closed | Section 41 of the NDPA forbids transferring personal data out of Nigeria without an adequate basis, and section 44 requires the country of any transfer to be named in the registration. The decision is recorded: the media server is to be run by the practice, in Nigeria. Missing: the transport interface, and the place to record a transfer basis |
+| *(new)* A media provider outside Nigeria would be an unlawful transfer | — | partly closed | Section 41 of the NDPA forbids transferring personal data out of Nigeria without an adequate basis, and section 44 requires the country of any transfer to be named in the registration. The decision is recorded: the media server is to be run by the practice, in Nigeria. Missing: the transport interface |
+| *(new)* Nothing stopped patient data being sent abroad | — | **closed** | ENG-018: every outbound path asks the gate in `telemedicine/transfer.py` before it sends anything. A service outside Nigeria needs a lawful basis and a written justification, both recorded in `config/external_services.yaml`; without them the request is refused and nothing is sent. A transfer that happens is written to `transfer_logs`, with the destination, the basis, the justification and whose data it was |
 | REG-11 No consent to the telehealth consultation | Low | **closed** | The consultation is part of the care record and is made under section 30(1)(g) of the NDPA rather than by consent; the notice says so and covers the video provider, and the consent capture the notice depends on is implemented. What remains is the practice's wording, as with PRIV-02 |
 
 ## The sign-off conditions

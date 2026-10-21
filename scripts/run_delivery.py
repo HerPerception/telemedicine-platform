@@ -19,8 +19,23 @@ The configuration comes from the environment:
     TELEMEDICINE_SMTP_TLS       whether to start TLS (true)
     TELEMEDICINE_DELIVERY_INTERVAL  how long to wait between passes (30s)
 
+    TELEMEDICINE_TRANSFER_SERVICES   where the external services are
+                                     described (config/external_services.yaml)
+    TELEMEDICINE_SMTP_LAWFUL_BASIS   the basis for sending health data to
+                                     the mail server, when it is outside
+                                     Nigeria: consent, contract,
+                                     vital_interest, public_interest or
+                                     legal_claim
+    TELEMEDICINE_SMTP_JUSTIFICATION  what the transfer is for, in the
+                                     practice's own words
+
 The password is read from the environment and never written anywhere: not
 to the log, not to the audit trail, not to the outbox.
+
+**Nothing leaves Nigeria without a reason.** Before the worker connects to
+the mail server, the cross-border gate decides whether it may: a mail server
+outside Nigeria needs a lawful basis and a written justification, and
+without them the request is refused and nothing is sent.
 """
 
 from __future__ import annotations
@@ -37,6 +52,11 @@ from telemedicine.delivery import (  # noqa: E402
     SmtpTransport,
     directory_from_users,
 )
+from telemedicine.persistence.transfer_store import PostgresTransferLog  # noqa: E402
+from telemedicine.transfer import (  # noqa: E402
+    ExternalServiceRegistry,
+    OutboundGuard,
+)
 
 
 def main(argv=None) -> int:
@@ -52,6 +72,14 @@ def main(argv=None) -> int:
         return 1
 
     application = build_application(settings)
+
+    # The gate on transfers out of Nigeria. A message about a consultation is
+    # health data, and the mail server may be in another country.
+    registry = ExternalServiceRegistry.from_file(settings.transfer_services)
+    guard = OutboundGuard(
+        registry,
+        transfer_log=PostgresTransferLog(application.database),
+    )
     transport = SmtpTransport(
         directory=directory_from_users(application.auth.users),
         host=settings.smtp_host,
@@ -60,6 +88,9 @@ def main(argv=None) -> int:
         username=settings.smtp_username,
         password=settings.smtp_password,
         start_tls=settings.smtp_tls,
+        guard=guard,
+        lawful_basis=settings.smtp_lawful_basis,
+        justification=settings.smtp_justification,
     )
     application.notifications.transport = transport
 

@@ -345,7 +345,10 @@ The engineering work that follows from this document, in the order it should be 
    record of every removal, and the two flags that stop anything being deleted. What is missing is
    the numbers: the periods are placeholders until the adviser confirms them, and the job does
    nothing until they are (§5).
-4. **A place to record the basis for a transfer**, and to refuse a transfer with no basis (§7).
+4. ~~**A place to record the basis for a transfer**, and to refuse a transfer with no basis~~ —
+   **done (ENG-018)**: every outbound path asks the gate before it sends anything, a service
+   outside Nigeria needs a lawful basis and a written justification, and a transfer that happens is
+   recorded in `transfer_logs` (§7).
 5. **The media transport**, written as an interface with one implementation: a server the practice
    runs (§7).
 6. **OAuth 2.0 and SMART-on-FHIR**, which the Nigeria Core guide expects and this project does not

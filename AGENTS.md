@@ -45,6 +45,7 @@ exists; check the repository before assuming anything.
 | `docs/compliance/nigeria.md` | The answers for the jurisdiction: the law, the decisions, and what is still to be settled |
 | `docs/consent-design.md` | The consent record and the endpoints that reach it |
 | `docs/retention-design.md` | The retention policy, what is past its period, and how a record is removed |
+| `docs/transfer-design.md` | The gate on transfers out of Nigeria, and the log of transfers |
 | `docs/compliance/privacy-notice-draft.md` | The draft privacy notice, and the four optional-use consents |
 | `docs/deployment.md` | The runbook: what a deployment is, what it needs, and how to bring it up |
 | `docs/notification-design.md` | The notification outbox: the confirmations, the transport and the retry |
@@ -59,7 +60,9 @@ exists; check the repository before assuming anything.
 | `telemedicine/consent_api.py` | The consent endpoints: a patient grants and withdraws, a clinician reads |
 | `telemedicine/medications.py` | The Nigerian dispensing identity of a medicine: the brand, the NAFDAC number, and the example list |
 | `telemedicine/retention.py` | The retention policy, what is past its period, and how a record is removed |
+| `telemedicine/transfer.py` | The gate on transfers out of Nigeria: what may be sent, and where |
 | `config/retention_policy.yaml` | The retention policy: the periods, and the two flags that stop anything being deleted |
+| `config/external_services.yaml` | The external services, where each of them is, and the basis recorded for it |
 | `db/consent_schema.sql` | PostgreSQL DDL for the consent record — append-only, like the audit log |
 | `telemedicine/repositories.py` | Where the records live, and the implementation that keeps them in memory |
 | `telemedicine/config.py`, `telemedicine/application.py` | The settings, and the application assembled from them |
@@ -70,6 +73,19 @@ exists; check the repository before assuming anything.
 | `scripts/healthcheck.py` | Whether the application is ready to serve |
 | `scripts/report_breach.py` | Assembles the section 40(2) breach report from the audit log |
 | `scripts/retention.py` | The retention job: `check` reports what is past its period, `delete` removes it |
+| `scripts/audit_external_services.py` | The inventory of the external services, and whether anything was sent to them |
+
+## Transfers out of Nigeria
+
+**Nothing leaves the country without a reason.** Section 41 of the Nigeria Data Protection Act 2023
+forbids a transfer unless the recipient has an adequate level of protection or one of the section 43
+conditions applies, and section 41(2) requires the basis to be recorded.
+
+Every outbound path asks `telemedicine/transfer.py` before it sends anything. A service outside
+Nigeria needs a lawful basis and a written justification, both recorded in
+`config/external_services.yaml`; without them the request is refused and nothing is sent. **Every
+service in the shipped configuration is blocked**, because the practice has not yet confirmed a
+transfer. A service in Nigeria needs neither, because nothing leaves the country.
 
 ## Retention
 
@@ -122,7 +138,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (658 tests, 68 of them skipped without a database).
+Expected result of the test command: `OK` (694 tests, 74 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
