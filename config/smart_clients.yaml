@@ -1,0 +1,49 @@
+# The SMART-on-FHIR client registration.
+#
+# TODO_FUTURE - this is not needed for the MVP, and it is off.
+#
+# SMART on FHIR is how a hospital's electronic health record launches an
+# application: the clinician clicks the app inside the record, the record
+# sends the browser to the application with a code, and the application
+# exchanges that code for a token.
+#
+# **A practice that is not connected to a hospital does not need any of
+# this.** The flag below is off, the endpoints are not registered, and the
+# ordinary sign-in works exactly as it did. Leave it off.
+#
+# When it is switched on, the EHR's own addresses go here, along with the
+# client id the EHR has registered for this application, and the identities
+# that may sign in.
+#
+# The client is a **public client**: it keeps no secret, and it proves
+# that it is the one that started the flow with PKCE. That is why there is
+# no secret in this file - one in a repository is one in everybody's
+# repository.
+
+# Whether the SMART endpoints exist at all. Off by default.
+smart.enabled: false
+
+# The electronic health record's own addresses. They are its addresses, not
+# ours: the record is the authorization server, and we are the client.
+smart.authorization_endpoint: https://ehr.example.ng/auth
+smart.token_endpoint: https://ehr.example.ng/token
+smart.userinfo_endpoint: https://ehr.example.ng/userinfo
+# The issuer, which the authorization request has to name.
+smart.issuer: https://ehr.example.ng
+
+# The client id the record has registered for this application.
+smart.client_id: REPLACE_WITH_THE_REGISTERED_CLIENT_ID
+
+# Where the record sends the browser back to. It has to be exactly what was
+# registered with the record, or the record refuses the redirect.
+smart.redirect_uri: https://app.example.ng/smart/callback
+
+# The scopes asked for. A patient may read their own record; a clinician
+# may write a prescription into it. The list is the practice's decision, and
+# the record may refuse any of them.
+smart.scopes: openid profile launch/patient patient/*.read user/MedicationRequest.write
+
+# Who may sign in through the record, and which local account each of them
+# is. Without a line here, the clinician is refused: the practice has to
+# decide who its clinicians are, and the record does not.
+identity.clinician@example.ng: REPLACE_WITH_THE_LOCAL_ACCOUNT_ID

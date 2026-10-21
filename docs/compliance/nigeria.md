@@ -353,8 +353,10 @@ The engineering work that follows from this document, in the order it should be 
    runs~~ — **done (ENG-019)**: the media server is LiveKit and a TURN server, in `webrtc-server/`,
    in the country, and the application issues the access tokens (§7). What is left is the practice's
    own: a host in Nigeria, a public address and a certificate.
-6. **OAuth 2.0 and SMART-on-FHIR**, which the Nigeria Core guide expects and this project does not
-   yet have (SEC-08).
+6. ~~**OAuth 2.0 and SMART-on-FHIR**~~ — **the client side is built and switched off (ENG-020)**:
+   the discovery document, the redirect to the record, and the code exchange, with the state signed
+   and PKCE. **It is off, and it stays off** until the practice is connected to a hospital's record;
+   the ordinary sign-in is enough without one (SEC-08).
 7. **The audit trail exported for the DPO** — the trail is there; the report is not.
 
 Items 3 and 4 are the ones the law puts a clock on. Item 1 was the third, and ENG-015 did it.
