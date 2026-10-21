@@ -66,6 +66,11 @@ specially. The purposes you can agree to are in part two.
 | The Nigeria Data Protection Commission | **[only where the law requires it]** | The Commission's functions under the Act |
 | Nobody else | — | We do not sell your data, and we do not share it for advertising |
 
+**If any of them is outside Nigeria**, we only send your information there with a reason that the
+law accepts — usually your consent, given after we have told you what it means — and we write that
+reason down. **[Until the practice has confirmed that reason in writing, no information leaves
+Nigeria at all, and a request to send it is refused rather than sent.]**
+
 ## 4. Decisions made automatically
 
 *(Section 27(1)(g))*

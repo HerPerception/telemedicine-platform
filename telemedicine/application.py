@@ -39,9 +39,11 @@ from telemedicine.persistence.database import Database
 from telemedicine.persistence.document_store import PostgresDocumentStore
 from telemedicine.persistence.lockout import InMemoryLockoutStore, PostgresLockoutStore
 from telemedicine.persistence.notification_store import PostgresNotificationStore
+from telemedicine.persistence.transfer_store import PostgresTransferLog
 from telemedicine.notifications import NotificationService
 from telemedicine.prescriptions import PrescriptionService
 from telemedicine.records import RecordsService
+from telemedicine.transfer import ExternalServiceRegistry, OutboundGuard
 from telemedicine.video import VideoService
 from telemedicine.video_api import VideoApplication
 
@@ -61,6 +63,7 @@ class Application:
     notifications: NotificationService
     video: VideoService
     consents: ConsentService
+    transfer_guard: OutboundGuard
     fhir: FhirApplication
     video_api: VideoApplication
 
@@ -161,6 +164,14 @@ def build_application(settings: Optional[Settings] = None,
     consents = ConsentService(store=consent_store, audit=audit, records=records,
                               authorizer=records.authorizer)
 
+    # The gate on transfers out of Nigeria. Every outbound path asks it
+    # before it sends anything.
+    registry = ExternalServiceRegistry.from_file(settings.transfer_services)
+    transfer_guard = OutboundGuard(
+        registry,
+        transfer_log=PostgresTransferLog(database) if database is not None else None,
+    )
+
     fhir = FhirApplication(FhirRepository(records, booking, prescriptions), auth,
                             trust_forwarded_for=settings.trust_forwarded_for,
                             consent=consents)
@@ -179,6 +190,7 @@ def build_application(settings: Optional[Settings] = None,
         notifications=notifications,
         video=video,
         consents=consents,
+        transfer_guard=transfer_guard,
         fhir=fhir,
         video_api=video_api,
     )

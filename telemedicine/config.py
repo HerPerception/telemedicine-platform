@@ -58,6 +58,10 @@ ENV_SMTP_USERNAME = "TELEMEDICINE_SMTP_USERNAME"
 ENV_SMTP_PASSWORD = "TELEMEDICINE_SMTP_PASSWORD"
 ENV_SMTP_TLS = "TELEMEDICINE_SMTP_TLS"
 ENV_DELIVERY_INTERVAL = "TELEMEDICINE_DELIVERY_INTERVAL"
+# ENG-018: the gate on transfers out of Nigeria.
+ENV_TRANSFER_SERVICES = "TELEMEDICINE_TRANSFER_SERVICES"
+ENV_SMTP_LAWFUL_BASIS = "TELEMEDICINE_SMTP_LAWFUL_BASIS"
+ENV_SMTP_JUSTIFICATION = "TELEMEDICINE_SMTP_JUSTIFICATION"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
@@ -79,6 +83,13 @@ class Settings:
     smtp_password: Optional[str] = None
     smtp_tls: bool = True
     delivery_interval: int = 30
+    # Where the external services are described. Each one says where it is,
+    # and what the practice has recorded for sending data to it.
+    transfer_services: Optional[str] = None
+    # The basis and the justification for sending health data to the mail
+    # server. They are only needed when it is outside Nigeria.
+    smtp_lawful_basis: Optional[str] = None
+    smtp_justification: str = ""
 
     @property
     def has_database(self) -> bool:
@@ -112,12 +123,18 @@ class Settings:
             raise ValueError(
                 f"the mail server port and the delivery interval must be numbers: {error}"
             ) from error
+        transfer_services = (environment.get(ENV_TRANSFER_SERVICES) or "").strip() or None
+        smtp_lawful_basis = (environment.get(ENV_SMTP_LAWFUL_BASIS) or "").strip() or None
+        smtp_justification = (environment.get(ENV_SMTP_JUSTIFICATION) or "").strip()
         return cls(database_url=database_url, host=host, port=port, audit_anchor=anchor,
                    trust_forwarded_for=forwarded in ("1", "true", "yes", "on"),
                    smtp_host=smtp_host, smtp_port=smtp_port, smtp_from=smtp_from,
                    smtp_username=smtp_username, smtp_password=smtp_password,
                    smtp_tls=True if not tls else tls in ("1", "true", "yes", "on"),
-                   delivery_interval=delivery_interval)
+                   delivery_interval=delivery_interval,
+                   transfer_services=transfer_services,
+                   smtp_lawful_basis=smtp_lawful_basis,
+                   smtp_justification=smtp_justification)
 
     def describe(self) -> str:
         """A description of the settings, without the secret."""
