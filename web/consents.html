@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your consents</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         margin: 0; padding: 2rem; line-height: 1.5; }
+  main { max-width: 42rem; margin: 0 auto; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.05rem; margin-bottom: .2rem; }
+  .box { border: 1px solid #8884; border-radius: .6rem; padding: 1rem 1.2rem;
+         margin: 1rem 0; }
+  .hidden { display: none; }
+  label { display: block; margin: .6rem 0 .2rem; }
+  input { width: 100%; padding: .5rem; font: inherit; }
+  button { font: inherit; padding: .5rem 1.2rem; margin-top: .6rem; cursor: pointer; }
+  button.secondary { background: none; border: 1px solid #8886; }
+  ul { padding-left: 1.2rem; }
+  li { margin: .8rem 0; }
+  .muted { opacity: .75; font-size: .9rem; }
+  .state { font-size: .85rem; border-radius: .3rem; padding: .1rem .45rem;
+           border: 1px solid #8886; }
+  .granted { color: #1b5e20; border-color: #1b5e2055; }
+  .withdrawn { color: #b3261e; border-color: #b3261e55; }
+  .not-granted { opacity: .7; }
+  .error { color: #b3261e; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Your consents</h1>
+  <p class="muted">
+    These are the things you have agreed to, and the things you have taken back. You can take
+    back any of them at any time, and it takes effect at once — the practice cannot use your
+    records for it afterwards.
+  </p>
+
+  <!-- 1. sign in ------------------------------------------------------- -->
+  <section id="signin" class="box">
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username">
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <button id="signin-button">Sign in</button>
+    <p class="error hidden" id="signin-error"></p>
+  </section>
+
+  <!-- 2. the consents -------------------------------------------------- -->
+  <section id="consents" class="box hidden">
+    <h2>What you have agreed to</h2>
+    <ul id="list"></ul>
+    <p class="muted" id="notice"></p>
+    <p class="error hidden" id="withdraw-error"></p>
+    <button id="signout-button" class="secondary">Sign out</button>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// The same session key the consultation page uses, so that signing in on
+// one page signs you in on the other.
+const sessionKey = "telemedicine.session";
+let sessionToken = sessionStorage.getItem(sessionKey);
+
+function show(id) {
+  for (const name of ["signin", "consents"]) {
+    document.getElementById(name).classList.toggle("hidden", name !== id);
+  }
+}
+
+async function api(path, options) {
+  const response = await fetch(path, Object.assign({
+    headers: {
+      "Content-Type": "application/json",
+      ...(sessionToken ? { "Authorization": "Bearer " + sessionToken } : {})
+    }
+  }, options || {}));
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = (body.issue && body.issue[0] && body.issue[0].diagnostics)
+      || body.message || "the request was refused";
+    throw new Error(message);
+  }
+  return body;
+}
+
+document.getElementById("signin-button").addEventListener("click", async () => {
+  const error = document.getElementById("signin-error");
+  error.classList.add("hidden");
+  try {
+    const payload = await api("/fhir/session", {
+      method: "POST",
+      body: JSON.stringify({
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value
+      })
+    });
+    sessionToken = payload.token;
+    sessionStorage.setItem(sessionKey, sessionToken);
+    await load();
+  } catch (problem) {
+    error.textContent = problem.message;
+    error.classList.remove("hidden");
+  }
+});
+
+document.getElementById("signout-button").addEventListener("click", () => {
+  sessionToken = null;
+  sessionStorage.removeItem(sessionKey);
+  show("signin");
+});
+
+/* What the patient has agreed to, and what they have withdrawn. */
+async function load() {
+  const state = await api("/fhir/consent");
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  for (const entry of state.purposes) {
+    const item = document.createElement("li");
+    const title = document.createElement("div");
+    title.textContent = entry.description;
+    const badge = document.createElement("span");
+    badge.className = "state " + entry.state;
+    badge.textContent = entry.state === "granted" ? "agreed"
+      : entry.state === "withdrawn" ? "withdrawn" : "not agreed";
+    title.appendChild(document.createTextNode(" "));
+    title.appendChild(badge);
+    item.appendChild(title);
+
+    if (entry.state === "granted") {
+      const button = document.createElement("button");
+      button.className = "secondary";
+      button.textContent = "Withdraw consent";
+      button.addEventListener("click", () => withdraw(entry, button));
+      item.appendChild(button);
+    }
+    list.appendChild(item);
+  }
+  document.getElementById("notice").textContent = state.notice_acknowledged
+    ? "You have been shown the privacy notice (version " + state.notice_version + ")."
+    : "You have not been shown the privacy notice yet.";
+  show("consents");
+}
+
+/* Take a consent back.
+
+   The request is one DELETE, and it is as easy as the one that gave the
+   consent — which is what section 35 of the Act requires. The list is
+   reloaded afterwards, so the button disappears and the state says
+   "withdrawn". */
+async function withdraw(entry, button) {
+  const error = document.getElementById("withdraw-error");
+  error.classList.add("hidden");
+  button.disabled = true;
+  try {
+    await api("/fhir/consent/" + encodeURIComponent(entry.purpose), { method: "DELETE" });
+    await load();
+  } catch (problem) {
+    error.textContent = problem.message;
+    error.classList.remove("hidden");
+    button.disabled = false;
+  }
+}
+
+if (sessionToken) { load().catch(() => show("signin")); }
+else { show("signin"); }
+</script>
+</body>
+</html>

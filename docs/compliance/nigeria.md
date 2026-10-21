@@ -116,6 +116,12 @@ withdraw, and `POST /fhir/consent/notice` for the acknowledgement. A clinician w
 patient may read the state — they have to know before they use a record for a research purpose — and
 may change nothing. The endpoints are in `docs/consent-design.md`.
 
+**And the withdrawal takes effect at once.** ENG-021 added the gate every optional use goes
+through, `ConsentService.require_consent()`, which is asked when the use happens and not when the
+consent was taken — so a withdrawal is not something that has to be noticed, it is something the
+next attempt meets. The patient takes it back in one request, on their own, without a clinician,
+and there is a page for it (`web/consents.html`).
+
 So the withdrawal is one request, which is what section 35 asks for: it has to be "as easy for the
 data subject to withdraw, as to give consent".
 

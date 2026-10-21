@@ -150,6 +150,24 @@ class InMemoryConsentStore(ConsentStore):
                     if event.user_id == user_id and event.purpose == purpose]
 
 
+class ConsentRequiredError(AuthorizationError):
+    """An optional use was attempted without the consent it needs.
+
+    It is a refusal, not a failure: the use did not happen, and the reason
+    says which consent is missing.
+    """
+
+
+# What each purpose is, in a sentence, for the message the patient reads.
+_PURPOSE_SUBJECTS = {
+    PURPOSE_RESEARCH: "their records being used for research",
+    PURPOSE_TEACHING: "their records being used for teaching",
+    PURPOSE_MARKETING: "being contacted about the practice's services",
+    PURPOSE_PARTNER_SHARING: "their records being shared with another provider",
+    PURPOSE_CONSULTATION_RECORDING: "the consultation being recorded",
+}
+
+
 class ConsentService:
     """Grants, withdrawals, and the question "may we do this?".
 
@@ -349,6 +367,26 @@ class ConsentService:
         clinician: the answer is the patient's decision, whoever is asking.
         """
         return self.has_consent(user_id, purpose)
+
+    def require_consent(self, user_id: str, purpose: str, *,
+                        what: Optional[str] = None) -> None:
+        """Refuse unless the patient has agreed to this purpose.
+
+        **This is the gate every optional use goes through.** It is asked at
+        the moment the use happens, not when the consent was taken, so a
+        withdrawal takes effect at once: the next attempt is refused.
+
+        It raises :class:`ConsentRequiredError`, which the API turns into a
+        refusal with the reason.
+        """
+        if self.has_consent(user_id, purpose):
+            return
+        subject = what or _PURPOSE_SUBJECTS.get(purpose, purpose)
+        raise ConsentRequiredError(
+            f"the patient has not consented to {subject}, so it cannot be done",
+            resource_type="consent",
+            resource_id=purpose,
+            action="use")
 
     # -- internals ---------------------------------------------------------
 
