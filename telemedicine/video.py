@@ -471,15 +471,7 @@ class VideoService:
 
         recording = media.recording_enabled
         if recording and media.recording_consent_required:
-            if not self._recording_consented(appointment):
-                self._audit_denied(actor, ACTION_TOKEN, appointment_id,
-                                   "the recording was asked for and the patient has "
-                                   "not consented to it")
-                raise AuthorizationError(
-                    "the patient has not consented to the consultation being "
-                    "recorded, so no media token is issued",
-                    resource_type=ResourceType.APPOINTMENT.value,
-                    resource_id=appointment_id, action=Action.JOIN.value)
+            self._require_recording_consent(actor, appointment)
 
         now = self._clock()
         expires_at = now + timedelta(seconds=DEFAULT_TTL_SECONDS)
@@ -499,14 +491,38 @@ class VideoService:
             can_publish=True, can_subscribe=True, recording=recording,
         )
 
-    def _recording_consented(self, appointment: Appointment) -> bool:
-        """Whether the patient has agreed to the consultation being recorded."""
+    def _require_recording_consent(self, actor: UserAccount,
+                                    appointment: Appointment) -> None:
+        """The patient's consent to the consultation being recorded.
+
+        It goes through the gate every optional use goes through, so the
+        question is asked **when the use happens** and not when the consent
+        was taken: a withdrawal takes effect at once, and the next attempt
+        is refused.
+        """
+        from telemedicine.consent import (
+            PURPOSE_CONSULTATION_RECORDING,
+            ConsentRequiredError,
+        )
         if self.consents is None:
             # No consent service, no consent. The recording stays off.
-            return False
-        from telemedicine.consent import PURPOSE_CONSULTATION_RECORDING
-        return self.consents.has_consent(appointment.patient_user_id,
-                                         PURPOSE_CONSULTATION_RECORDING)
+            self._audit_denied(actor, ACTION_TOKEN, appointment.appointment_id,
+                               "the recording was asked for and there is no "
+                               "consent record to check it against")
+            raise ConsentRequiredError(
+                "there is no consent record, so the consultation is not recorded",
+                resource_type="consent",
+                resource_id=PURPOSE_CONSULTATION_RECORDING,
+                action="use")
+        try:
+            self.consents.require_consent(
+                appointment.patient_user_id, PURPOSE_CONSULTATION_RECORDING,
+                what="the consultation being recorded")
+        except ConsentRequiredError:
+            self._audit_denied(actor, ACTION_TOKEN, appointment.appointment_id,
+                               "the recording was asked for and the patient has "
+                               "not consented to it")
+            raise
 
     def verify_join_token(self, token: str) -> dict:
         """Check a join token and return its claims.

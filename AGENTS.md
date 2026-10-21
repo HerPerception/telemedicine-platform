@@ -79,7 +79,16 @@ exists; check the repository before assuming anything.
 | `scripts/retention.py` | The retention job: `check` reports what is past its period, `delete` removes it |
 | `scripts/audit_external_services.py` | The inventory of the external services, and whether anything was sent to them |
 | `webrtc-server/` | The media server, the TURN server, the bucket, and the client page |
+| `web/consents.html` | The patient's page: what they have agreed to, and the button to take it back |
 | `config/smart_clients.yaml` | The SMART client registration, and who may sign in through it |
+
+## Consent
+
+**A patient takes a consent back on their own, in one request** — `DELETE /fhir/consent/<purpose>`
+— and it does not need a clinician. Every optional use goes through one gate,
+`ConsentService.require_consent()`, which is asked **when the use happens**, so a withdrawal takes
+effect at once. The record is append-only, so what was agreed and when it was taken back are both
+still there.
 
 ## SMART on FHIR
 
@@ -160,7 +169,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (748 tests, 74 of them skipped without a database).
+Expected result of the test command: `OK` (768 tests, 74 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 

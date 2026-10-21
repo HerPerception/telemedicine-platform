@@ -37,6 +37,11 @@ does not.
 | `POST /fhir/consent/notice` | record that the notice was shown |
 | `POST /fhir/consent/<purpose>` | grant a consent for one optional purpose |
 | `DELETE /fhir/consent/<purpose>` | withdraw it |
+| `POST /fhir/consent/<purpose>/withdraw` | the same withdrawal, for the clients that would rather ask with a POST |
+
+**A withdrawal is one request, and it does not need a clinician.** The patient takes it back on
+their own, in the same number of steps as giving it, which is what section 35 asks for: "as easy
+for the data subject to withdraw, as to give consent".
 
 They are under the FHIR API because they are about the caller's own account, in the same way the
 session endpoint is, and because a client already talks to one base path.
@@ -105,6 +110,28 @@ agreeing to it can both be shown. The database refuses an update, a delete and a
 Every change is audited, and so is every refusal — a caller who was refused is exactly the thing an
 audit trail exists to show. A clinician reading a patient's state is audited as well, because it is
 an access to personal data.
+
+## The gate
+
+**Every optional use goes through one gate**, `ConsentService.require_consent(user, purpose)`. It
+is asked **at the moment the use happens**, not when the consent was taken, so a withdrawal takes
+effect at once: the next attempt is refused, with the reason.
+
+That is the whole of the "block further processing" requirement, and it is one place rather than
+one check in each use. The use that exists today: the recording of a consultation (ENG-019). The
+uses that do not exist yet — research, teaching, sharing with another provider — will go through
+the same gate.
+
+**What the gate does not do:** it cannot stop a use that is already running. A recording that was
+already going when the patient withdrew is not stopped by the withdrawal, because the media server
+is doing the recording and the application is not in that loop. The next token is refused, so no
+new recording starts.
+
+## The patient's page
+
+`web/consents.html` — one page, no build step: it signs in, lists what the patient has agreed to
+and what they have withdrawn, and has a **"Withdraw consent"** button for each one. It is the
+smallest honest version of a patient dashboard, which this project does not have (A11Y-01).
 
 ## What it does not do
 

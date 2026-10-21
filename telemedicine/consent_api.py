@@ -52,6 +52,10 @@ EVIDENCE = "evidence"
 # consent for a purpose.
 NOTICE = "notice"
 
+# The path segment that withdraws a consent, for the clients that would
+# rather ask for it with a POST than a DELETE.
+WITHDRAW = "withdraw"
+
 
 class ConsentEndpoints:
     """The consent endpoints, called by the FHIR application."""
@@ -85,10 +89,20 @@ class ConsentEndpoints:
         return self.consent.state_for_actor(actor)
 
     def write(self, actor, tail: list, body: bytes) -> dict:
-        """Acknowledge the notice, or grant a consent."""
+        """Acknowledge the notice, grant a consent, or withdraw one.
+
+        A withdrawal may be asked for in two ways: ``DELETE
+        /fhir/consent/<purpose>``, which is the plainest, and ``POST
+        /fhir/consent/<purpose>/withdraw``, which some clients find easier
+        to write. They do the same thing, and the section 35 requirement is
+        the same either way: it must be as easy to withdraw as to give.
+        """
         payload = _parse(body)
         if not tail:
             raise ValidationError("a purpose is required")
+        if len(tail) == 2 and tail[1] == WITHDRAW:
+            self.remove(actor, tail[:1])
+            return self.consent.state_for_actor(actor)
         if len(tail) > 1:
             raise ValidationError("there is no such consent endpoint")
 
