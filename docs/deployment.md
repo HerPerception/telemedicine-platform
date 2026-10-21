@@ -55,6 +55,7 @@ never written anywhere.
 | `TELEMEDICINE_SMART_FHIR_ENABLED` | Whether the SMART-on-FHIR endpoints exist at all | `false` — **a practice that is not connected to a hospital does not need this**, and the ordinary sign-in is enough |
 | `TELEMEDICINE_SMART_CLIENTS` | Where the client registration is: the record's addresses, the client id, and who may sign in | `config/smart_clients.yaml` |
 | `TELEMEDICINE_SMART_STATE_SECRET` | The secret the redirect state is signed with. Without it, a state cannot be checked and the flow is refused | none — and with it unset, SMART cannot be used |
+| `TELEMEDICINE_DEMO_MODE` | Whether every document says **"DEMO - NOT FOR REAL PATIENTS"** on its face | `true` — **on by default**, because the practice has no legal adviser yet. Turn it off only when the practice is ready for the documents to be real |
 
 ## 3. Bringing it up
 
@@ -126,6 +127,18 @@ record has registered, and the identities that may sign in and the local account
 **The client keeps no secret** — it proves that it started the flow with PKCE instead — so there is
 nothing to leak from the repository. The state is signed with `TELEMEDICINE_SMART_STATE_SECRET`,
 which is the one secret the feature needs.
+
+## 4c. The demo mode
+
+**`TELEMEDICINE_DEMO_MODE` is on by default**, and every prescription says **"DEMO - NOT FOR REAL
+PATIENTS"** on its face.
+
+The practice has no legal adviser yet. A prescription that could be mistaken for a real one is
+worse than one that says plainly that it is not, and the whole of `TODO_LEGAL.md` is the list of
+what is waiting for that adviser.
+
+Turn it off (`TELEMEDICINE_DEMO_MODE=false`) only when the practice is ready for the documents to
+be real — and until then, use test data.
 
 ## 5. The audit anchors
 

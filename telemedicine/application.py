@@ -164,7 +164,8 @@ def build_application(settings: Optional[Settings] = None,
     booking = BookingService(slots, audit=audit, records=records, accounts=auth.users,
                              notifications=notifications)
     prescriptions = PrescriptionService(records, documents=documents, audit=audit,
-                                        notifications=notifications)
+                                        notifications=notifications,
+                                        demo_mode=settings.demo_mode)
     video = VideoService(records, audit=audit)
 
     # The consent record. It needs the records, because a clinician's access

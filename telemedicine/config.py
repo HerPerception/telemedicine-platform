@@ -75,6 +75,9 @@ ENV_RECORDING_BUCKET = "TELEMEDICINE_RECORDING_BUCKET"
 ENV_SMART_FHIR_ENABLED = "TELEMEDICINE_SMART_FHIR_ENABLED"
 ENV_SMART_CLIENTS = "TELEMEDICINE_SMART_CLIENTS"
 ENV_SMART_STATE_SECRET = "TELEMEDICINE_SMART_STATE_SECRET"
+# ENG-022: the demo mode. It is **on by default**, because the practice has
+# no legal adviser yet and the documents say so on their face.
+ENV_DEMO_MODE = "TELEMEDICINE_DEMO_MODE"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
@@ -121,6 +124,10 @@ class Settings:
     smart_fhir_enabled: Optional[bool] = None
     smart_clients: Optional[str] = None
     smart_state_secret: Optional[str] = None
+    # ENG-022: on by default. Every document says on its face that it is not
+    # for real patients, until an adviser has signed and the practice turns
+    # it off.
+    demo_mode: bool = True
 
     @property
     def has_database(self) -> bool:
@@ -164,6 +171,7 @@ class Settings:
                          if smart_text else None)
         smart_clients = (environment.get(ENV_SMART_CLIENTS) or "").strip() or None
         smart_state_secret = (environment.get(ENV_SMART_STATE_SECRET) or "").strip() or None
+        demo = (environment.get(ENV_DEMO_MODE) or "").strip().lower()
         recording = (environment.get(ENV_RECORDING_ENABLED) or "").strip().lower()
         recording_consent = (environment.get(ENV_RECORDING_CONSENT_REQUIRED)
                              or "").strip().lower()
@@ -189,7 +197,8 @@ class Settings:
                    recording_bucket=recording_bucket,
                    smart_fhir_enabled=smart_enabled in ("1", "true", "yes", "on"),
                    smart_clients=smart_clients,
-                   smart_state_secret=smart_state_secret)
+                   smart_state_secret=smart_state_secret,
+                   demo_mode=demo in ("1", "true", "yes", "on") if demo else True)
 
     def describe(self) -> str:
         """A description of the settings, without the secret."""
