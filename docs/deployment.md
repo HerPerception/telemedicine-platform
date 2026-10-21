@@ -52,6 +52,9 @@ never written anywhere.
 | `TELEMEDICINE_RECORDING_ENABLED` | Whether consultations are recorded at all | `false` — recording is off, and the patient's consent is needed as well |
 | `TELEMEDICINE_RECORDING_CONSENT_REQUIRED` | Whether the patient's consent to the recording is required | `true` |
 | `TELEMEDICINE_RECORDING_BUCKET` | The bucket the recordings go into: the local one, in Nigeria | none |
+| `TELEMEDICINE_SMART_FHIR_ENABLED` | Whether the SMART-on-FHIR endpoints exist at all | `false` — **a practice that is not connected to a hospital does not need this**, and the ordinary sign-in is enough |
+| `TELEMEDICINE_SMART_CLIENTS` | Where the client registration is: the record's addresses, the client id, and who may sign in | `config/smart_clients.yaml` |
+| `TELEMEDICINE_SMART_STATE_SECRET` | The secret the redirect state is signed with. Without it, a state cannot be checked and the flow is refused | none — and with it unset, SMART cannot be used |
 
 ## 3. Bringing it up
 
@@ -109,6 +112,20 @@ patient and the clinician who delivers the appointment. There is no third-party 
 no Twilio, no Agora, no LiveKit Cloud — and the media never leaves the country.
 
 `webrtc-server/README.md` has the ports, the public address the server needs, and the recording.
+
+## 4b. SMART on FHIR (off by default)
+
+**Leave it off.** SMART on FHIR is how a hospital's electronic health record launches an
+application: the clinician clicks the app inside the record, the record sends the browser to the
+application with a code, and the application exchanges that code for a token. A practice that is
+not connected to a hospital does not need it, and with `TELEMEDICINE_SMART_FHIR_ENABLED` unset the
+endpoints are not registered at all — the ordinary sign-in is the only way in, exactly as before.
+
+The registration is in `config/smart_clients.yaml`: the record's own addresses, the client id the
+record has registered, and the identities that may sign in and the local account each of them is.
+**The client keeps no secret** — it proves that it started the flow with PKCE instead — so there is
+nothing to leak from the repository. The state is signed with `TELEMEDICINE_SMART_STATE_SECRET`,
+which is the one secret the feature needs.
 
 ## 5. The audit anchors
 

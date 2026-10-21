@@ -16,10 +16,10 @@ documented; only because it is done.
 | Area | Findings | Closed | Partly closed | Open |
 | --- | --- | --- | --- | --- |
 | Privacy | 9 | 4 | 3 | 2 |
-| Security | 18 | 8 | 0 | 10 |
+| Security | 18 | 9 | 0 | 9 |
 | Accessibility | 4 | 0 | 1 | 3 |
 | Regulatory | 13 | 6 | 1 | 6 |
-| **Total** | **44** | **18** | **5** | **21** |
+| **Total** | **44** | **19** | **5** | **20** |
 
 The review found 37 issues; seven more were found while the work was being done, and are marked
 *(new)* in the tables below. The counts here are of all 44.
@@ -51,7 +51,7 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | SEC-05 No TLS | High | open | A deployment has to terminate it |
 | SEC-06 The audit log did not survive a restart | High | **closed** | `PostgresAuditLog` writes the chain to the `audit_log` table, under an advisory lock (`telemedicine/persistence/audit_store.py`) |
 | SEC-07 The chain is anchored nowhere outside the store | Medium | **closed** | `telemedicine/audit_anchor.py`: the head of the chain is published outside the database, and `scripts/verify_audit_chain.py` checks the chain against the anchors. A chain rewritten from the beginning verifies internally and fails against the anchors |
-| SEC-08 No OAuth2 and no SMART on FHIR | Medium | open | A decision first: a first-party-only API is legitimate for a single-clinician practice, but it has to be a decision |
+| SEC-08 No OAuth2 and no SMART on FHIR | Medium | **closed** | The decision has been made: a first-party-only API is what this practice needs, and the SMART client is built and **switched off** (ENG-020) — the discovery document, the redirect to the record, the code exchange with PKCE and a signed state. A practice that is not connected to a hospital's record does not need it, and with the flag unset the endpoints are not registered at all. The application is not an OAuth2 *server* for other applications, and nothing in the MVP needs that |
 | SEC-09 No CORS policy | Medium | open | An allowlist, when there is a client |
 | SEC-10 No conditional create or update | Medium | open | `If-Match` against the resource version |
 | SEC-11 The password policy is a floor | Low | open | Breached-password screening needs a network service |

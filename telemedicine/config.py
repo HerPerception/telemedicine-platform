@@ -70,6 +70,11 @@ ENV_LIVEKIT_API_SECRET = "TELEMEDICINE_LIVEKIT_API_SECRET"
 ENV_RECORDING_ENABLED = "TELEMEDICINE_RECORDING_ENABLED"
 ENV_RECORDING_CONSENT_REQUIRED = "TELEMEDICINE_RECORDING_CONSENT_REQUIRED"
 ENV_RECORDING_BUCKET = "TELEMEDICINE_RECORDING_BUCKET"
+# ENG-020: SMART on FHIR. Off by default: a practice that is not connected
+# to a hospital does not need it, and the ordinary sign-in is enough.
+ENV_SMART_FHIR_ENABLED = "TELEMEDICINE_SMART_FHIR_ENABLED"
+ENV_SMART_CLIENTS = "TELEMEDICINE_SMART_CLIENTS"
+ENV_SMART_STATE_SECRET = "TELEMEDICINE_SMART_STATE_SECRET"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
@@ -109,6 +114,13 @@ class Settings:
     recording_enabled: bool = False
     recording_consent_required: bool = True
     recording_bucket: Optional[str] = None
+    # ENG-020: SMART on FHIR. Off by default, and the endpoints are not
+    # registered at all while it is off.
+    # None means "not set in the environment", and the configuration file
+    # decides. True or False overrides it.
+    smart_fhir_enabled: Optional[bool] = None
+    smart_clients: Optional[str] = None
+    smart_state_secret: Optional[str] = None
 
     @property
     def has_database(self) -> bool:
@@ -147,6 +159,11 @@ class Settings:
         livekit_api_key = (environment.get(ENV_LIVEKIT_API_KEY) or "").strip() or None
         livekit_api_secret = (environment.get(ENV_LIVEKIT_API_SECRET) or "").strip() or None
         recording_bucket = (environment.get(ENV_RECORDING_BUCKET) or "").strip() or None
+        smart_text = (environment.get(ENV_SMART_FHIR_ENABLED) or "").strip().lower()
+        smart_enabled = (smart_text in ("1", "true", "yes", "on")
+                         if smart_text else None)
+        smart_clients = (environment.get(ENV_SMART_CLIENTS) or "").strip() or None
+        smart_state_secret = (environment.get(ENV_SMART_STATE_SECRET) or "").strip() or None
         recording = (environment.get(ENV_RECORDING_ENABLED) or "").strip().lower()
         recording_consent = (environment.get(ENV_RECORDING_CONSENT_REQUIRED)
                              or "").strip().lower()
@@ -169,7 +186,10 @@ class Settings:
                    recording_consent_required=(recording_consent in
                                                ("1", "true", "yes", "on")
                                                if recording_consent else True),
-                   recording_bucket=recording_bucket)
+                   recording_bucket=recording_bucket,
+                   smart_fhir_enabled=smart_enabled in ("1", "true", "yes", "on"),
+                   smart_clients=smart_clients,
+                   smart_state_secret=smart_state_secret)
 
     def describe(self) -> str:
         """A description of the settings, without the secret."""

@@ -64,13 +64,22 @@ class Application:
     video: VideoService
     consents: ConsentService
     transfer_guard: OutboundGuard
+    smart: Optional[object]
     fhir: FhirApplication
     video_api: VideoApplication
 
     @property
     def http(self) -> ApplicationRouter:
-        """The two HTTP surfaces, on one router."""
-        return ApplicationRouter({"/fhir": self.fhir, "/video": self.video_api})
+        """The HTTP surfaces, on one router.
+
+        The SMART endpoints are mounted at the root **only when they are
+        switched on**: with the flag off, the router has the two surfaces
+        it has always had, and the ordinary sign-in is the only way in.
+        """
+        surfaces = {"/fhir": self.fhir, "/video": self.video_api}
+        if self.smart is not None:
+            surfaces[""] = self.smart
+        return ApplicationRouter(surfaces)
 
     def apply_schema(self):
         """Apply the schema. Only possible with a database."""
@@ -191,6 +200,29 @@ def build_application(settings: Optional[Settings] = None,
     video_api = VideoApplication(video, auth,
                                  trust_forwarded_for=settings.trust_forwarded_for)
 
+    # SMART on FHIR (ENG-020). Off by default. When it is on, the
+    # application is mounted at the root, because a record looks for the
+    # discovery document at /.well-known/smart-configuration.
+    smart = None
+    from telemedicine.smart import load_configuration
+    from telemedicine.smart_api import SmartApplication
+    enabled = settings.smart_fhir_enabled
+    if enabled is None:
+        # The environment says nothing, so the configuration file decides.
+        try:
+            enabled = load_configuration(settings.smart_clients).enabled
+        except Exception:
+            enabled = False
+    if enabled:
+        configuration = load_configuration(settings.smart_clients)
+        if configuration.configured:
+            smart = SmartApplication(configuration, auth,
+                                     state_secret=settings.smart_state_secret or "")
+        else:
+            raise RuntimeError(
+                "SMART on FHIR is switched on, but the client registration is "
+                "not complete. Check config/smart_clients.yaml.")
+
     application = Application(
         settings=settings,
         database=database,
@@ -204,6 +236,7 @@ def build_application(settings: Optional[Settings] = None,
         video=video,
         consents=consents,
         transfer_guard=transfer_guard,
+        smart=smart,
         fhir=fhir,
         video_api=video_api,
     )

@@ -47,6 +47,7 @@ exists; check the repository before assuming anything.
 | `docs/retention-design.md` | The retention policy, what is past its period, and how a record is removed |
 | `docs/transfer-design.md` | The gate on transfers out of Nigeria, and the log of transfers |
 | `docs/media-design.md` | The media server the practice runs itself, and the token that opens a consultation |
+| `docs/smart-design.md` | SMART on FHIR: launching the application from a hospital's record — built, and switched off |
 | `docs/compliance/privacy-notice-draft.md` | The draft privacy notice, and the four optional-use consents |
 | `docs/deployment.md` | The runbook: what a deployment is, what it needs, and how to bring it up |
 | `docs/notification-design.md` | The notification outbox: the confirmations, the transport and the retry |
@@ -63,6 +64,7 @@ exists; check the repository before assuming anything.
 | `telemedicine/retention.py` | The retention policy, what is past its period, and how a record is removed |
 | `telemedicine/transfer.py` | The gate on transfers out of Nigeria: what may be sent, and where |
 | `telemedicine/livekit.py` | The access token for the media server: a JWT, signed with the standard library |
+| `telemedicine/smart.py`, `telemedicine/smart_api.py` | SMART on FHIR: the client registration, the discovery document, and the three endpoints |
 | `config/retention_policy.yaml` | The retention policy: the periods, and the two flags that stop anything being deleted |
 | `config/external_services.yaml` | The external services, where each of them is, and the basis recorded for it |
 | `db/consent_schema.sql` | PostgreSQL DDL for the consent record — append-only, like the audit log |
@@ -77,6 +79,15 @@ exists; check the repository before assuming anything.
 | `scripts/retention.py` | The retention job: `check` reports what is past its period, `delete` removes it |
 | `scripts/audit_external_services.py` | The inventory of the external services, and whether anything was sent to them |
 | `webrtc-server/` | The media server, the TURN server, the bucket, and the client page |
+| `config/smart_clients.yaml` | The SMART client registration, and who may sign in through it |
+
+## SMART on FHIR
+
+**Off by default, and the MVP does not need it.** It is how a hospital's electronic health record
+launches this application; a practice that is not connected to one signs in the ordinary way. With
+`TELEMEDICINE_SMART_FHIR_ENABLED` unset the endpoints are not registered at all, and the sign-in is
+the only way in. The client keeps no secret — it proves itself with PKCE — and the state is
+signed, so a state that was changed in the browser is refused.
 
 ## Video
 
@@ -149,7 +160,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (722 tests, 74 of them skipped without a database).
+Expected result of the test command: `OK` (748 tests, 74 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 
