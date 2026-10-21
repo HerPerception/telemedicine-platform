@@ -45,6 +45,13 @@ never written anywhere.
 | `TELEMEDICINE_TRANSFER_SERVICES` | Where the external services are described — which country each is in, and the basis and justification recorded for it | `config/external_services.yaml` |
 | `TELEMEDICINE_SMTP_LAWFUL_BASIS` | The basis for sending health data to the mail server, when it is outside Nigeria: `consent`, `contract`, `vital_interest`, `public_interest` or `legal_claim` | none — and without it, a mail server outside Nigeria is **refused** |
 | `TELEMEDICINE_SMTP_JUSTIFICATION` | What the transfer is for, in the practice's own words | none — and without it, a mail server outside Nigeria is **refused** |
+| `TELEMEDICINE_LIVEKIT_HOST` | Where the media server is — the practice's own server, in Nigeria | none — and without it there are no video consultations |
+| `TELEMEDICINE_LIVEKIT_URL` | What the browser connects to: `wss://video.example.ng` | none |
+| `TELEMEDICINE_LIVEKIT_API_KEY` | The key the media server is configured with | none — and without it there are no video consultations |
+| `TELEMEDICINE_LIVEKIT_API_SECRET` | The secret the access tokens are signed with. **Only the application has it**, and it is the whole of the gate: anybody who has it can mint a token for any room | none |
+| `TELEMEDICINE_RECORDING_ENABLED` | Whether consultations are recorded at all | `false` — recording is off, and the patient's consent is needed as well |
+| `TELEMEDICINE_RECORDING_CONSENT_REQUIRED` | Whether the patient's consent to the recording is required | `true` |
+| `TELEMEDICINE_RECORDING_BUCKET` | The bucket the recordings go into: the local one, in Nigeria | none |
 
 ## 3. Bringing it up
 
@@ -84,6 +91,24 @@ docker compose exec api python3 scripts/verify_audit_chain.py \
 It checks the chain internally, and then against the anchors that were published outside the
 database. **A chain that was rewritten from the beginning verifies internally and fails here** — which
 is the whole reason the anchors exist.
+
+## 4a. The media server
+
+The video consultations are carried by a server the practice runs itself, in Nigeria. It is a
+separate set of containers, in `webrtc-server/`, and it is started on its own:
+
+```bash
+cd webrtc-server && cp .env.example .env   # then fill in the keys
+docker compose up
+```
+
+The application is told where it is with `TELEMEDICINE_LIVEKIT_HOST`, `TELEMEDICINE_LIVEKIT_URL`,
+`TELEMEDICINE_LIVEKIT_API_KEY` and `TELEMEDICINE_LIVEKIT_API_SECRET`. **The secret is the whole of
+the gate**: the application is the only holder of it, and it issues a token only to the booked
+patient and the clinician who delivers the appointment. There is no third-party service involved —
+no Twilio, no Agora, no LiveKit Cloud — and the media never leaves the country.
+
+`webrtc-server/README.md` has the ports, the public address the server needs, and the recording.
 
 ## 5. The audit anchors
 

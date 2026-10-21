@@ -55,12 +55,17 @@ PURPOSE_RESEARCH = "research"
 PURPOSE_TEACHING = "teaching"
 PURPOSE_MARKETING = "marketing"
 PURPOSE_PARTNER_SHARING = "partner_sharing"
+# Added by ENG-019: recording the consultation. It is an optional use like
+# the others, and it needs its own consent, because the picture and the
+# voice are health data.
+PURPOSE_CONSULTATION_RECORDING = "consultation_recording"
 
 OPTIONAL_PURPOSES: Tuple[str, ...] = (
     PURPOSE_RESEARCH,
     PURPOSE_TEACHING,
     PURPOSE_MARKETING,
     PURPOSE_PARTNER_SHARING,
+    PURPOSE_CONSULTATION_RECORDING,
 )
 
 PURPOSE_DESCRIPTIONS: Dict[str, str] = {
@@ -78,6 +83,10 @@ PURPOSE_DESCRIPTIONS: Dict[str, str] = {
     PURPOSE_PARTNER_SHARING: (
         "Sharing your records with another practice or provider you have asked us to "
         "share them with."
+    ),
+    PURPOSE_CONSULTATION_RECORDING: (
+        "Recording the video consultation, so that it can be kept with your record and "
+        "looked at again later."
     ),
 }
 

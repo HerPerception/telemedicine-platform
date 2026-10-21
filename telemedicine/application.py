@@ -44,7 +44,7 @@ from telemedicine.notifications import NotificationService
 from telemedicine.prescriptions import PrescriptionService
 from telemedicine.records import RecordsService
 from telemedicine.transfer import ExternalServiceRegistry, OutboundGuard
-from telemedicine.video import VideoService
+from telemedicine.video import MediaConfiguration, VideoService
 from telemedicine.video_api import VideoApplication
 
 
@@ -163,6 +163,19 @@ def build_application(settings: Optional[Settings] = None,
     # records hold.
     consents = ConsentService(store=consent_store, audit=audit, records=records,
                               authorizer=records.authorizer)
+
+    # The media server the practice runs itself, in Nigeria (ENG-019).
+    video.media = MediaConfiguration(
+        host=settings.livekit_host,
+        url=settings.livekit_url,
+        api_key=settings.livekit_api_key,
+        api_secret=settings.livekit_api_secret,
+        recording_enabled=settings.recording_enabled,
+        recording_consent_required=settings.recording_consent_required,
+        recording_bucket=settings.recording_bucket,
+    )
+    # The consent service decides whether a consultation may be recorded.
+    video.consents = consents
 
     # The gate on transfers out of Nigeria. Every outbound path asks it
     # before it sends anything.

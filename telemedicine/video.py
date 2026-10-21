@@ -173,6 +173,45 @@ class MediaTransport:
         return None
 
 
+@dataclass(frozen=True)
+class MediaConfiguration:
+    """The media server the practice runs itself, in Nigeria.
+
+    The host is where the server is; the URL is what the browser connects
+    to. The API key and secret sign the access tokens.
+    """
+
+    host: Optional[str] = None
+    url: Optional[str] = None
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    # Recording is off by default, and needs the patient's consent even when
+    # it is on.
+    recording_enabled: bool = False
+    recording_consent_required: bool = True
+    recording_bucket: Optional[str] = None
+
+    @property
+    def configured(self) -> bool:
+        """Whether the media server can be given out a token at all."""
+        return bool(self.api_key and self.api_secret and self.url)
+
+
+@dataclass(frozen=True)
+class MediaToken:
+    """A token for the media server, and what it allows."""
+
+    token: str
+    room: str
+    url: str
+    identity: str
+    expires_at: datetime
+    expires_in: int
+    can_publish: bool = True
+    can_subscribe: bool = True
+    recording: bool = False
+
+
 class VideoService:
     """Rooms, the waiting room, admission control and join tokens."""
 
@@ -180,7 +219,9 @@ class VideoService:
                  audit: Optional[AuditLog] = None, transport: Optional[MediaTransport] = None,
                  clock=_utc_now, early_grace: timedelta = DEFAULT_EARLY_GRACE,
                  late_grace: timedelta = DEFAULT_LATE_GRACE,
-                 token_ttl: timedelta = DEFAULT_TOKEN_TTL):
+                 token_ttl: timedelta = DEFAULT_TOKEN_TTL,
+                 media: Optional["MediaConfiguration"] = None,
+                 consents=None):
         self.records = records
         self.authorizer = authorizer if authorizer is not None else Authorizer()
         self.audit = audit if audit is not None else AuditLog(clock=clock)
@@ -189,6 +230,11 @@ class VideoService:
         self.early_grace = early_grace
         self.late_grace = late_grace
         self.token_ttl = token_ttl
+        # The media server the practice runs itself (ENG-019), and the
+        # consent service, which decides whether a consultation may be
+        # recorded.
+        self.media = media
+        self.consents = consents
         self._rooms: Dict[str, Room] = {}
 
     # -- opening a room ---------------------------------------------------
@@ -385,6 +431,82 @@ class VideoService:
                     f"issued a join token until {_iso(expires_at)}")
         return JoinToken(token=token, room_id=room.room_id, user_id=actor.user_id,
                          expires_at=expires_at)
+
+    def media_token(self, actor: UserAccount, appointment_id: str) -> MediaToken:
+        """A media-server token for the patient or the clinician of a consultation.
+
+        The rules are the ones that already apply to the consultation: the
+        booked patient and the clinician who delivers the appointment, and
+        nobody else. The token names the room, the identity, and how long it
+        is good for; it carries nothing about the consultation itself.
+
+        **Recording needs the patient's consent.** When recording is switched
+        on and the patient has not agreed to it, no token is issued at all:
+        the picture and the voice are health data, and the consent for
+        them is the patient's own.
+        """
+        from telemedicine.livekit import DEFAULT_TTL_SECONDS, issue_access_token, room_name
+
+        appointment = self._require_appointment(appointment_id)
+        scope = self._appointment_scope(appointment)
+        decision = self.authorizer.decide(actor, Action.JOIN,
+                                           ResourceType.APPOINTMENT, scope)
+        if not decision.allowed:
+            self._audit_denied(actor, ACTION_TOKEN, appointment_id,
+                               "a media token was asked for by somebody who is not "
+                               "in the consultation")
+            raise AuthorizationError(
+                "only the booked patient and the clinician who delivers the "
+                "appointment may take part in the consultation",
+                resource_type=ResourceType.APPOINTMENT.value,
+                resource_id=appointment_id, action=Action.JOIN.value)
+
+        media = self.media
+        if media is None or not media.configured:
+            raise JoinUnavailable(
+                "no_media_server",
+                "the media server is not configured, so no consultation can be "
+                "held yet",
+                retryable=False)
+
+        recording = media.recording_enabled
+        if recording and media.recording_consent_required:
+            if not self._recording_consented(appointment):
+                self._audit_denied(actor, ACTION_TOKEN, appointment_id,
+                                   "the recording was asked for and the patient has "
+                                   "not consented to it")
+                raise AuthorizationError(
+                    "the patient has not consented to the consultation being "
+                    "recorded, so no media token is issued",
+                    resource_type=ResourceType.APPOINTMENT.value,
+                    resource_id=appointment_id, action=Action.JOIN.value)
+
+        now = self._clock()
+        expires_at = now + timedelta(seconds=DEFAULT_TTL_SECONDS)
+        room = room_name(appointment_id)
+        token = issue_access_token(
+            media.api_key, media.api_secret,
+            identity=actor.user_id, room=room,
+            ttl_seconds=DEFAULT_TTL_SECONDS, now=int(now.timestamp()),
+        )
+        self._audit(actor, ACTION_TOKEN, appointment_id, OUTCOME_SUCCESS,
+                    f"issued a media token for {room} until {_iso(expires_at)}"
+                    + (" (recording allowed)" if recording else ""))
+        return MediaToken(
+            token=token, room=room, url=media.url or "",
+            identity=actor.user_id, expires_at=expires_at,
+            expires_in=int(DEFAULT_TTL_SECONDS),
+            can_publish=True, can_subscribe=True, recording=recording,
+        )
+
+    def _recording_consented(self, appointment: Appointment) -> bool:
+        """Whether the patient has agreed to the consultation being recorded."""
+        if self.consents is None:
+            # No consent service, no consent. The recording stays off.
+            return False
+        from telemedicine.consent import PURPOSE_CONSULTATION_RECORDING
+        return self.consents.has_consent(appointment.patient_user_id,
+                                         PURPOSE_CONSULTATION_RECORDING)
 
     def verify_join_token(self, token: str) -> dict:
         """Check a join token and return its claims.

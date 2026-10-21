@@ -41,8 +41,20 @@ CREATE TABLE IF NOT EXISTS consent_event (
     occurred_at         timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT consent_event_purpose_known
         CHECK (purpose IS NULL
-               OR purpose IN ('research', 'teaching', 'marketing', 'partner_sharing'))
+               OR purpose IN ('research', 'teaching', 'marketing', 'partner_sharing',
+                              'consultation_recording'))
 );
+
+-- A table created before the recording consent existed gets the new purpose
+-- here, so that re-running this file upgrades it rather than doing nothing.
+-- The rows that predate it keep the purposes they had, and none of them is
+-- the recording one: nobody recorded a consultation before there was a
+-- consent for it.
+ALTER TABLE consent_event DROP CONSTRAINT IF EXISTS consent_event_purpose_known;
+ALTER TABLE consent_event ADD CONSTRAINT consent_event_purpose_known
+    CHECK (purpose IS NULL
+           OR purpose IN ('research', 'teaching', 'marketing', 'partner_sharing',
+                          'consultation_recording'));
 
 -- Everything that happened for one account, in order.
 CREATE INDEX IF NOT EXISTS consent_event_user ON consent_event (user_id, occurred_at);

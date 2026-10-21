@@ -95,6 +95,14 @@ class VideoApplication:
 
         actor = self._authenticate(headers)
 
+        # A token for the media server, for a booked consultation.
+        if segments[0] == "consultations":
+            if len(segments) != 3 or segments[2] != "video-token":
+                return self._error(404, "not_found", f"no endpoint at '{path}'")
+            if method != "POST":
+                return self._method_not_allowed(method)
+            return self._video_token(actor, segments[1])
+
         if segments[0] != "rooms":
             return self._error(404, "not_found", f"no endpoint at '{path}'")
 
@@ -153,6 +161,26 @@ class VideoApplication:
         if result.token:
             payload["token"] = result.token
         return self._json(200, payload)
+
+    def _video_token(self, actor, appointment_id: str) -> Response:
+        """The media-server token for a consultation.
+
+        The patient or the clinician who delivers the appointment, and
+        nobody else. The token names the room and the identity, and is good
+        for two hours.
+        """
+        media = self.service.media_token(actor, appointment_id)
+        return self._json(201, {
+            "token": media.token,
+            "room": media.room,
+            "url": media.url,
+            "identity": media.identity,
+            "can_publish": media.can_publish,
+            "can_subscribe": media.can_subscribe,
+            "recording": media.recording,
+            "expires_at": media.expires_at.isoformat().replace("+00:00", "Z"),
+            "expires_in": media.expires_in,
+        })
 
     def _admit(self, actor, room_id: str, body: bytes) -> Response:
         payload = self._parse(body)
