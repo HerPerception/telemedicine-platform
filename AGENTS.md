@@ -178,7 +178,7 @@ python3 -m unittest discover -s tests -v
 python3 -m unittest tests.test_fhir_api -v
 ```
 
-Expected result of the test command: `OK` (785 tests, 74 of them skipped without a database).
+Expected result of the test command: `OK` (788 tests, 74 of them skipped without a database).
 
 The persistence tests need a PostgreSQL server, and are skipped without one:
 

@@ -29,6 +29,56 @@ ANSWER_PATH = REPO_ROOT / "docs" / "compliance" / "nigeria.md"
 NOTICE_PATH = REPO_ROOT / "docs" / "compliance" / "privacy-notice-draft.md"
 
 
+class RemediationStatusTest(unittest.TestCase):
+    """The status of the findings, and the list of what is left.
+
+    The list has to keep up with the tables: a finding that is closed must
+    not still be listed as waiting, and a finding that is open must be in
+    the list, or the list is not the list.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = (REPO_ROOT / "docs" / "reviews"
+                    / "remediation-status.md").read_text(encoding="utf-8")
+
+    def _findings(self):
+        """The finding and its state, for every row of the tables."""
+        found = []
+        for line in self.text.splitlines():
+            if not line.startswith("| "):
+                continue
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            if len(cells) < 4:
+                continue
+            state = cells[2].replace("*", "").strip()
+            if state in ("open", "partly closed", "closed"):
+                found.append((cells[0], state))
+        return found
+
+    def test_it_says_what_is_left_and_whose_job_it_is(self):
+        self.assertIn("## What is left, and whose job it is", self.text)
+
+    def test_every_finding_that_is_not_closed_is_in_the_list(self):
+        section = self.text.split("## What is left, and whose job it is")[1]
+        for finding, state in self._findings():
+            if state not in ("open", "partly closed"):
+                continue
+            # The row names the finding in words; the list names its id.
+            identifier = finding.split()[0]
+            if identifier.startswith("*"):
+                continue
+            with self.subTest(finding=identifier):
+                self.assertIn(identifier, section,
+                              f"{identifier} is {state} but is not in the list "
+                              "of what is left")
+
+    def test_the_list_says_the_two_gaps_that_are_not_findings(self):
+        section = self.text.split("## What is left, and whose job it is")[1]
+        self.assertIn("never been built", section)
+        self.assertIn("restore", section.lower())
+
+
 class ComplianceAnswerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -90,6 +90,86 @@ The sign-off conditions of §8 of the review are listed at the end, with their s
 | *(new)* Nothing stopped patient data being sent abroad | — | **closed** | ENG-018: every outbound path asks the gate in `telemedicine/transfer.py` before it sends anything. A service outside Nigeria needs a lawful basis and a written justification, both recorded in `config/external_services.yaml`; without them the request is refused and nothing is sent. A transfer that happens is written to `transfer_logs`, with the destination, the basis, the justification and whose data it was |
 | REG-11 No consent to the telehealth consultation | Low | **closed** | The consultation is part of the care record and is made under section 30(1)(g) of the NDPA rather than by consent; the notice says so and covers the video provider, and the consent capture the notice depends on is implemented. What remains is the practice's wording, as with PRIV-02 |
 
+## What is left, and whose job it is
+
+The tables above say **what** is open. They do not say **whose job it is**, and that is the
+question a person — or an agent — picking this up actually has. Here it is, in one place.
+
+**Twenty-five findings are not closed.** They fall into four groups, and the sizes are the point:
+most of what is left is *not* code.
+
+### Code — ten findings
+
+The engineering that is waiting to be written.
+
+| Finding | What it needs |
+| --- | --- |
+| A11Y-01 | **the client.** There is no user interface: two single pages (the consultation client, the consents page) and no application. A patient needs to sign in, book, join, read their prescriptions and manage their consents; a clinician needs the schedule, the waiting room, the consultation and prescribing |
+| A11Y-02 | the prescription document in an accessible form. The PDF is not screen-reader friendly; the structured `MedicationRequest` is |
+| A11Y-03 | the API's errors: English only, and thin |
+| A11Y-04 | free text returned unescaped |
+| PRIV-04 | a route to an access or erasure request. The lawful basis is now known (section 30(1)(g)), so it can be built — and it is a right with a clock on it |
+| REG-04 | nothing stops a prescription for a controlled substance |
+| REG-05 | the patient's location is never established |
+| REG-06 | nothing says the service is not for emergencies |
+| SEC-10 | no conditional create or update (`If-Match` against the version) |
+| SEC-13 | the session lifetime is a single constant — a change, with the practice's decision behind it |
+
+**The accessibility gate (condition 5) is in this group, and it is the largest of them**: WCAG 2.1
+AA has never been assessed, because there was nothing to assess. An assessment needs a person who
+knows the standard, not only an automated check.
+
+### The deployment's job — four findings
+
+None of these is the application's, and none can be closed by writing code.
+
+| Finding | What it needs |
+| --- | --- |
+| SEC-05 | TLS, terminated in front of the application |
+| SEC-14 | request logging, at the proxy |
+| SEC-15 | a real server behind the proxy, not the development server |
+| PRIV-05 | the prescription documents encrypted at rest, in an object store rather than in the database |
+
+### A decision the practice has to make — eight findings
+
+These are not engineering. They are choices, and the engineering follows the choice.
+
+| Finding | The decision |
+| --- | --- |
+| REG-03 | is a prescription a document or a transmission, and what the rules are for that choice |
+| REG-10 | the single-clinician assumption: a third role, and the access review that goes with it |
+| PRIV-06 | what a clinician needs to see of a record. The whole record is served now |
+| PRIV-07 | whether the status code may tell a caller that a resource exists |
+| SEC-09 | the CORS policy — or the decision that the client is served from the same origin, and needs none |
+| SEC-11 | the password policy: breached-password screening needs a network service |
+| SEC-12 | multi-factor authentication |
+| SEC-16 | what a client with a token may call |
+
+### The practice's, and the adviser's — three findings
+
+| Finding | Whose it is |
+| --- | --- |
+| PRIV-03 | the retention periods, and the adviser's signature. The mechanism is built and switched off in two places |
+| REG-02 | the Essential Drugs List itself. The prescription now carries the brand, the strength and the NAFDAC number; what is missing is the list to check them against |
+| REG-07 | the clinical safety process: who reviews what, and what happens when something goes wrong |
+
+### And two gaps that are not findings
+
+They are not on any list, and they are the two things a person would find out the hard way.
+
+1. **The container has never been built.** Docker is not available in the development
+   environment, so the `Dockerfile` and the compose file have never been run. The first build on a
+   machine with Docker is where they are really tested, and it is where a wrong path or a missing
+   file would show up.
+2. **There is no restore procedure that has been tried.** The runbook has a backup command; a
+   restore that has never been performed is not a restore. The database holds every record the
+   practice has, and this is the one thing the practice would be least able to do without, on the
+   day it matters most.
+
+**The short version.** Of the twenty-five open findings, ten are code, four are the deployment's,
+eight are a decision, and three are the practice's. And the two gaps above are worth more than
+several of the findings, because nothing in the list says "the backup has never been restored".
+
 ## The sign-off conditions
 
 The conditions of §8 of the review, and where each one stands.
